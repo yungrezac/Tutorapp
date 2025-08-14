@@ -13,6 +13,8 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <!-- Babel для JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Supabase -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <style>
         :root {
@@ -103,7 +105,10 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
         
-        const BOT_TOKEN = "YOUR_BOT_TOKEN"; // Замените на токен вашего бота
+        // Инициализация Supabase
+        const supabaseUrl = 'https://jmiaxlfglnyqythmjaqn.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptaWF4bGZnbG55cXl0aG1qYXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNjU2ODgsImV4cCI6MjA3MDc0MTY4OH0.IMRtToyrifCHxtvmSTwyB-mozqWEuDAN0u-iij2XxbE';
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
         // Компонент карточки видео для ленты
         function VideoCard({ video, onPlay }) {
@@ -116,8 +121,8 @@
             return (
                 <div className="bg-[var(--tg-secondary-bg)] rounded-xl shadow-md overflow-hidden m-4">
                     <div className="video-thumbnail" onClick={() => onPlay(video)}>
-                        {video.thumbnail ? (
-                            <img src={video.thumbnail} alt="Превью видео" />
+                        {video.thumbnail_url ? (
+                            <img src={video.thumbnail_url} alt="Превью видео" />
                         ) : (
                             <div className="play-icon"></div>
                         )}
@@ -199,63 +204,68 @@
                 tg.MainButton.showProgress(false);
 
                 try {
-                    // Сначала получаем URL для загрузки от Telegram
-                    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            file_id: file.name // В реальном приложении нужно использовать file_id от Telegram
-                        })
-                    });
+                    // 1. Загружаем видео в Supabase Storage
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `${Date.now()}.${fileExt}`;
+                    const filePath = `${fileName}`;
 
-                    const data = await response.json();
-                    
-                    if (!data.ok) {
-                        throw new Error('Не удалось получить URL для загрузки');
-                    }
+                    const { error: uploadError } = await supabase.storage
+                        .from('videos')
+                        .upload(filePath, file, {
+                            cacheControl: '3600',
+                            upsert: false,
+                            contentType: file.type
+                        });
 
-                    // Здесь должна быть логика загрузки файла на ваш сервер
-                    // Это примерная реализация - в реальном приложении нужно использовать ваш бэкенд
-                    const formData = new FormData();
-                    formData.append('video', file);
-                    formData.append('title', title);
-                    formData.append('description', description);
-                    formData.append('category', category);
-                    formData.append('userId', tg.initDataUnsafe.user?.id || 'unknown');
+                    if (uploadError) throw uploadError;
 
-                    const uploadResponse = await fetch('YOUR_UPLOAD_ENDPOINT', {
-                        method: 'POST',
-                        body: formData,
-                        onUploadProgress: (progressEvent) => {
-                            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                            setUploadProgress(progress);
-                            tg.MainButton.setProgress(progress);
-                        }
-                    });
+                    // 2. Получаем публичный URL видео
+                    const { data: videoUrl } = supabase.storage
+                        .from('videos')
+                        .getPublicUrl(filePath);
 
-                    const uploadResult = await uploadResponse.json();
-                    
-                    if (uploadResult.success) {
-                        // Сообщаем боту о успешной загрузке
-                        const dataToSend = {
-                            action: 'video_uploaded',
-                            payload: {
-                                fileId: uploadResult.fileId,
-                                title,
-                                description,
-                                category,
-                                thumbnail: previewUrl,
-                                userId: tg.initDataUnsafe.user?.id
-                            }
-                        };
+                    // 3. Загружаем превью (если есть)
+                    let thumbnailUrl = null;
+                    if (previewUrl) {
+                        const thumbnailBlob = await fetch(previewUrl).then(r => r.blob());
+                        const thumbnailPath = `thumbnails/${fileName}.jpg`;
                         
-                        tg.sendData(JSON.stringify(dataToSend));
-                        onUploadComplete(dataToSend.payload);
-                    } else {
-                        throw new Error(uploadResult.error || 'Ошибка загрузки');
+                        const { error: thumbnailError } = await supabase.storage
+                            .from('videos')
+                            .upload(thumbnailPath, thumbnailBlob, {
+                                cacheControl: '3600',
+                                upsert: false,
+                                contentType: 'image/jpeg'
+                            });
+
+                        if (!thumbnailError) {
+                            const { data: thumbnailData } = supabase.storage
+                                .from('videos')
+                                .getPublicUrl(thumbnailPath);
+                            thumbnailUrl = thumbnailData.publicUrl;
+                        }
                     }
+
+                    // 4. Сохраняем метаданные в таблицу videos
+                    const { data, error } = await supabase
+                        .from('videos')
+                        .insert([{
+                            title,
+                            description,
+                            category,
+                            video_url: videoUrl.publicUrl,
+                            thumbnail_url: thumbnailUrl,
+                            user_id: tg.initDataUnsafe.user?.id || 'anonymous',
+                            user_name: tg.initDataUnsafe.user?.first_name || 'Anonymous'
+                        }])
+                        .select();
+
+                    if (error) throw error;
+
+                    // 5. Возвращаем данные о новом видео
+                    const newVideo = data[0];
+                    onUploadComplete(newVideo);
+                    
                 } catch (error) {
                     console.error('Upload error:', error);
                     tg.showAlert(`Ошибка загрузки: ${error.message}`);
@@ -355,7 +365,7 @@
                             controls 
                             autoPlay 
                             className="w-full h-full object-contain"
-                            src={video.videoUrl}
+                            src={video.video_url}
                         >
                             Ваш браузер не поддерживает видео тег.
                         </video>
@@ -381,7 +391,7 @@
             }, [searchTerm, userVideos]);
 
             const handleUploadComplete = (newVideo) => {
-                setUserVideos(prev => [newVideo, ...prev]);
+                onUpload(prev => [newVideo, ...prev]);
                 setShowUploadForm(false);
             };
 
@@ -411,7 +421,7 @@
                             {filteredVideos.length > 0 ? (
                                 filteredVideos.map(video => (
                                     <VideoCard 
-                                        key={video.fileId} 
+                                        key={video.id} 
                                         video={video} 
                                         onPlay={setCurrentVideo}
                                     />
@@ -440,28 +450,20 @@
                 tg.ready();
                 tg.expand();
 
-                // Загрузка видео пользователя
+                // Загрузка видео из Supabase
                 const loadVideos = async () => {
                     try {
-                        // В реальном приложении нужно запрашивать видео у вашего сервера
-                        // Это примерная реализация - замените на ваш API
-                        const userId = tg.initDataUnsafe.user?.id;
-                        if (!userId) {
-                            setView('feed');
-                            return;
-                        }
+                        const { data, error } = await supabase
+                            .from('videos')
+                            .select('*')
+                            .order('created_at', { ascending: false });
 
-                        // Пример запроса к вашему бэкенду
-                        const response = await fetch(`YOUR_API_ENDPOINT/videos?userId=${userId}`);
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            setUserVideos(data.videos);
-                        } else {
-                            console.error("Failed to load videos:", data.error);
-                        }
+                        if (error) throw error;
+
+                        setUserVideos(data || []);
                     } catch (error) {
                         console.error("Error loading videos:", error);
+                        tg.showAlert("Ошибка при загрузке видео");
                     } finally {
                         setView('feed');
                     }
@@ -472,6 +474,21 @@
                 // Убираем основную кнопку, если мы не в форме
                 tg.MainButton.hide();
 
+                // Подписка на изменения в таблице videos
+                const channel = supabase
+                    .channel('videos_changes')
+                    .on(
+                        'postgres_changes',
+                        { event: 'INSERT', schema: 'public', table: 'videos' },
+                        (payload) => {
+                            setUserVideos(prev => [payload.new, ...prev]);
+                        }
+                    )
+                    .subscribe();
+
+                return () => {
+                    supabase.removeChannel(channel);
+                };
             }, []);
 
             switch (view) {
@@ -479,7 +496,7 @@
                     return <div className="flex justify-center items-center h-screen"><div className="loader"></div></div>;
                 case 'feed':
                 default:
-                    return <VideoFeed userVideos={userVideos} />;
+                    return <VideoFeed userVideos={userVideos} onUpload={setUserVideos} />;
             }
         }
 
