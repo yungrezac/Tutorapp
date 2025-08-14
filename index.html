@@ -2,8 +2,8 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Video Tutorials</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Мои Видео</title>
     <!-- Tailwind CSS для стилей -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Telegram Web App SDK -->
@@ -13,53 +13,27 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <!-- Babel для JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        window.initializeApp = initializeApp;
-        import { getFirestore, collection, addDoc, getDocs, onSnapshot, doc, getDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        window.getFirestore = getFirestore;
-        window.collection = collection;
-        window.addDoc = addDoc;
-        window.getDocs = getDocs;
-        window.onSnapshot = onSnapshot;
-        window.doc = doc;
-        window.getDoc = getDoc;
-        window.query = query;
-        window.orderBy = orderBy;
-    </script>
 
     <style>
+        :root {
+            --tg-bg: var(--tg-theme-bg-color, #ffffff);
+            --tg-text: var(--tg-theme-text-color, #000000);
+            --tg-hint: var(--tg-theme-hint-color, #999999);
+            --tg-button: var(--tg-theme-button-color, #2481cc);
+            --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
+            --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f3f3f3);
+        }
         body {
-            background-color: var(--tg-theme-bg-color, #ffffff);
-            color: var(--tg-theme-text-color, #000000);
+            background-color: var(--tg-bg);
+            color: var(--tg-text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             margin: 0;
             padding: 0;
-        }
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        .modal-content {
-            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
-            padding: 24px;
-            border-radius: 12px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            overscroll-behavior: none;
         }
         .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid var(--tg-theme-button-color, #3498db);
+            border: 4px solid var(--tg-secondary-bg);
+            border-top: 4px solid var(--tg-button);
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -69,246 +43,214 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .fab {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            background-color: var(--tg-button);
+            color: var(--tg-button-text);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+            z-index: 999;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useCallback } = React;
+        const { useState, useEffect, useMemo } = React;
+        
+        const BOT_USERNAME = "nodaddyroll_bot"; // <-- ВАЖНО: Укажите имя вашего бота
 
-        // --- ВАЖНО: Вставьте сюда ваши данные из Firebase ---
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
-        // ----------------------------------------------------
-
-        // Инициализация Firebase
-        const app = window.initializeApp(firebaseConfig);
-        const db = window.getFirestore(app);
-        const videosCollection = window.collection(db, "videos");
-
-        // Компонент для отображения одной карточки видео
+        // Компонент карточки видео для ленты
         function VideoCard({ video }) {
+            const tg = window.Telegram.WebApp;
+            const shareVideo = () => {
+                const text = `Посмотрите крутой ролик: "${video.title}"`;
+                // Используем switchInlineQuery для вызова инлайн-режима
+                tg.switchInlineQuery(video.title, []); 
+            };
+
             return (
-                <div className="bg-[var(--tg-theme-secondary-bg-color)] rounded-xl shadow-md overflow-hidden m-2">
+                <div className="bg-[var(--tg-secondary-bg)] rounded-xl shadow-md overflow-hidden m-4">
                     <div className="p-4">
-                        <div className="uppercase tracking-wide text-sm text-[var(--tg-theme-button-color)] font-bold">{video.category}</div>
-                        <h2 className="block mt-1 text-lg leading-tight font-medium text-[var(--tg-theme-text-color)]">{video.title}</h2>
-                        <p className="mt-2 text-[var(--tg-theme-hint-color)]">{video.description}</p>
-                        <p className="mt-2 text-xs text-[var(--tg-theme-hint-color)]">Загрузил: {video.uploaderName}</p>
+                        <div className="flex justify-between items-center">
+                            <div className="uppercase tracking-wide text-sm font-bold" style={{color: 'var(--tg-button)'}}>{video.category}</div>
+                            <button onClick={shareVideo} className="text-sm p-1 rounded-md" style={{color: 'var(--tg-button)'}}>Поделиться</button>
+                        </div>
+                        <h2 className="block mt-1 text-lg leading-tight font-medium text-[var(--tg-text)]">{video.title}</h2>
+                        <p className="mt-2 text-[var(--tg-hint)]">{video.description}</p>
                     </div>
                 </div>
             );
         }
-        
-        // Компонент формы для добавления информации о видео
-        function AddMetadataForm({ fileId, uploaderInfo }) {
+
+        // Компонент формы для добавления информации
+        function AddMetadataForm({ fileId }) {
             const [title, setTitle] = useState('');
             const [description, setDescription] = useState('');
             const [category, setCategory] = useState('FSK');
             const [isLoading, setIsLoading] = useState(false);
-            const [error, setError] = useState('');
             const tg = window.Telegram.WebApp;
 
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                if (!title || !description) {
-                    setError('Название и описание обязательны.');
-                    return;
-                }
-                setIsLoading(true);
-                setError('');
+            useEffect(() => {
+                tg.MainButton.setParams({
+                    text: 'СОХРАНИТЬ И ПОДЕЛИТЬСЯ',
+                    color: tg.themeParams.button_color || '#2481cc',
+                    text_color: tg.themeParams.button_text_color || '#ffffff',
+                    is_active: false,
+                    is_visible: true
+                });
+            }, []);
 
-                try {
-                    await window.addDoc(videosCollection, {
+            useEffect(() => {
+                if (title && description) {
+                    tg.MainButton.isActive = true;
+                } else {
+                    tg.MainButton.isActive = false;
+                }
+            }, [title, description]);
+
+            const handleSubmit = () => {
+                if (!tg.MainButton.isActive) return;
+
+                setIsLoading(true);
+                tg.MainButton.showProgress();
+
+                const dataToSend = {
+                    action: 'save_video',
+                    payload: {
+                        fileId,
                         title,
                         description,
                         category,
-                        fileId,
-                        uploaderId: uploaderInfo.id,
-                        uploaderName: uploaderInfo.firstName,
-                        uniqueId: `video_${Date.now()}_${uploaderInfo.id}`,
-                        createdAt: new Date()
-                    });
-                    
-                    // Отправляем боту сообщение, что все готово
-                    tg.sendData(JSON.stringify({ status: 'success', title: title }));
-                    // Показываем уведомление и закрываем приложение
-                    tg.showAlert('Видео успешно добавлено!', () => {
-                        tg.close();
-                    });
-
-                } catch (err) {
-                    console.error("Error adding document: ", err);
-                    setError('Не удалось сохранить данные. Попробуйте еще раз.');
-                    tg.showAlert(`Ошибка: ${err.message}`);
-                    setIsLoading(false);
-                }
+                    }
+                };
+                
+                tg.sendData(JSON.stringify(dataToSend));
+                // Бот получит данные и закроет приложение после обработки
             };
+
+            useEffect(() => {
+                tg.onEvent('mainButtonClicked', handleSubmit);
+                return () => {
+                    tg.offEvent('mainButtonClicked', handleSubmit);
+                };
+            }, [handleSubmit]);
 
             return (
                 <div className="p-4">
-                    <h1 className="text-2xl font-bold mb-4 text-[var(--tg-theme-text-color)]">Добавить информацию о видео</h1>
-                    <p className="mb-4 text-[var(--tg-theme-hint-color)]">Вы загрузили видео. Теперь добавьте детали.</p>
-                    <form onSubmit={handleSubmit}>
-                        <div className="mb-4">
-                            <label className="block text-[var(--tg-theme-text-color)] mb-2" htmlFor="title">Название</label>
-                            <input
-                                id="title"
-                                type="text"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                className="w-full p-2 rounded bg-[var(--tg-theme-bg-color)] border border-[var(--tg-theme-hint-color)] text-[var(--tg-theme-text-color)]"
-                                placeholder="Название ролика"
-                            />
-                        </div>
-                        <div className="mb-4">
-                            <label className="block text-[var(--tg-theme-text-color)] mb-2" htmlFor="description">Описание</label>
-                            <textarea
-                                id="description"
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className="w-full p-2 rounded bg-[var(--tg-theme-bg-color)] border border-[var(--tg-theme-hint-color)] text-[var(--tg-theme-text-color)]"
-                                placeholder="Краткое описание"
-                                rows="3"
-                            ></textarea>
-                        </div>
-                        <div className="mb-6">
-                            <label className="block text-[var(--tg-theme-text-color)] mb-2" htmlFor="category">Категория</label>
-                            <select
-                                id="category"
-                                value={category}
-                                onChange={(e) => setCategory(e.target.value)}
-                                className="w-full p-2 rounded bg-[var(--tg-theme-bg-color)] border border-[var(--tg-theme-hint-color)] text-[var(--tg-theme-text-color)]"
-                            >
-                                <option value="FSK">FSK</option>
-                                <option value="Wizard">Wizard</option>
-                                <option value="Aggressive">Aggressive</option>
-                            </select>
-                        </div>
-                        {error && <p className="text-red-500 mb-4">{error}</p>}
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full p-3 rounded-lg text-[var(--tg-theme-button-text-color)]"
-                            style={{ backgroundColor: `var(--tg-theme-button-color, #3498db)` }}
-                        >
-                            {isLoading ? 'Сохранение...' : 'Сохранить и опубликовать'}
-                        </button>
-                    </form>
+                    <h1 className="text-2xl font-bold mb-2 text-[var(--tg-text)]">Информация о видео</h1>
+                    <p className="mb-6 text-[var(--tg-hint)]">Добавьте детали, чтобы другие могли найти ваш ролик.</p>
+                    <div className="space-y-4">
+                        <input id="title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)]" placeholder="Название ролика" />
+                        <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)]" placeholder="Краткое описание" rows="4"></textarea>
+                        <select id="category" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none">
+                            <option value="FSK">FSK</option>
+                            <option value="Wizard">Wizard</option>
+                            <option value="Aggressive">Aggressive</option>
+                        </select>
+                    </div>
                 </div>
             );
         }
 
-        // Главный компонент приложения
-        function App() {
-            const [mode, setMode] = useState('loading'); // loading, feed, form, video_detail
-            const [videos, setVideos] = useState([]);
-            const [filteredVideos, setFilteredVideos] = useState([]);
-            const [searchTerm, setSearchTerm] = useState('');
-            const [fileId, setFileId] = useState(null);
-            const [videoDetail, setVideoDetail] = useState(null);
-            const [error, setError] = useState('');
+        // Экран "Мои Видео" (Лента)
+        function VideoFeed({ userVideos }) {
+             const [searchTerm, setSearchTerm] = useState('');
+             const tg = window.Telegram.WebApp;
 
+            const filteredVideos = useMemo(() => {
+                if (!userVideos) return [];
+                return userVideos.filter(video => 
+                    (video.title?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+                );
+            }, [searchTerm, userVideos]);
+
+            const openBotChat = () => {
+                tg.openTelegramLink(`https://t.me/${BOT_USERNAME}`);
+            };
+
+            return (
+                <div>
+                    <div className="p-4 sticky top-0 z-10" style={{backgroundColor: 'var(--tg-bg)'}}>
+                         <input 
+                            type="text"
+                            placeholder="🔍 Поиск по моим видео..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)]"
+                        />
+                    </div>
+                    {filteredVideos.length > 0 ? (
+                        filteredVideos.map(video => <VideoCard key={video.fileId} video={video} />)
+                    ) : (
+                        <div className="text-center p-8 text-[var(--tg-hint)]">
+                            <h3 className="font-bold text-lg text-[var(--tg-text)] mb-2">Вы еще не загружали видео</h3>
+                            <p>Нажмите на "+" чтобы узнать, как это сделать.</p>
+                        </div>
+                    )}
+                    <div className="fab" onClick={openBotChat}>+</div>
+                </div>
+            );
+        }
+
+        // Главный компонент
+        function App() {
+            const [view, setView] = useState('loading'); // loading, feed, form
+            const [formProps, setFormProps] = useState({});
+            const [userVideos, setUserVideos] = useState([]);
             const tg = window.Telegram.WebApp;
 
             useEffect(() => {
                 tg.ready();
-                tg.expand(); // Раскрываем приложение на весь экран
+                tg.expand();
 
                 const startParam = tg.initDataUnsafe?.start_param;
                 
-                if (startParam) {
-                    if (startParam.startsWith('file_')) {
-                        setFileId(startParam.replace('file_', ''));
-                        setMode('form');
-                    } else if (startParam.startsWith('video_')) {
-                        // TODO: Загрузка конкретного видео
-                        setMode('video_detail');
+                // Данные о видео пользователя могут быть переданы в URL при открытии
+                const urlParams = new URLSearchParams(window.location.search);
+                const videoData = urlParams.get('videos');
+
+                if (videoData) {
+                    try {
+                        setUserVideos(JSON.parse(decodeURIComponent(videoData)));
+                    } catch (e) {
+                        console.error("Failed to parse video data", e);
                     }
-                } else {
-                    setMode('feed');
                 }
 
-                // Загрузка всех видео для ленты
-                const q = window.query(videosCollection, window.orderBy("createdAt", "desc"));
-                const unsubscribe = window.onSnapshot(q, (querySnapshot) => {
-                    const videosData = [];
-                    querySnapshot.forEach((doc) => {
-                        videosData.push({ id: doc.id, ...doc.data() });
-                    });
-                    setVideos(videosData);
-                    setFilteredVideos(videosData);
-                    if(mode !== 'form') setMode('feed');
-                }, (err) => {
-                    console.error("Error fetching videos: ", err);
-                    setError('Не удалось загрузить видео.');
-                    setMode('error');
-                });
+                if (startParam && startParam.startsWith('file_')) {
+                    setFormProps({ fileId: startParam.replace('file_', '') });
+                    setView('form');
+                } else {
+                    setView('feed');
+                }
                 
-                return () => unsubscribe();
+                // Убираем основную кнопку, если мы не в форме
+                if (!startParam) {
+                    tg.MainButton.hide();
+                }
 
             }, []);
-            
-            useEffect(() => {
-                const results = videos.filter(video => 
-                    video.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    video.description.toLowerCase().includes(searchTerm.toLowerCase())
-                );
-                setFilteredVideos(results);
-            }, [searchTerm, videos]);
 
-            const uploaderInfo = {
-                id: tg.initDataUnsafe?.user?.id,
-                firstName: tg.initDataUnsafe?.user?.first_name || 'Аноним'
-            };
-
-            const renderContent = () => {
-                switch (mode) {
-                    case 'loading':
-                        return <div className="flex justify-center items-center h-screen"><div className="loader"></div></div>;
-                    case 'error':
-                        return <div className="p-4 text-center text-red-500">{error}</div>;
-                    case 'form':
-                        return <AddMetadataForm fileId={fileId} uploaderInfo={uploaderInfo} />;
-                    case 'feed':
-                        return (
-                            <div>
-                                <div className="p-4 sticky top-0 bg-[var(--tg-theme-bg-color)] z-10">
-                                    <input 
-                                        type="text"
-                                        placeholder="🔍 Поиск по названию..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full p-3 rounded-lg bg-[var(--tg-theme-secondary-bg-color)] text-[var(--tg-theme-text-color)] border-none"
-                                    />
-                                </div>
-                                {filteredVideos.length > 0 ? (
-                                    filteredVideos.map(video => <VideoCard key={video.id} video={video} />)
-                                ) : (
-                                    <p className="text-center p-4 text-[var(--tg-theme-hint-color)]">Видео не найдены.</p>
-                                )}
-                                <div className="p-4 text-center text-xs text-[var(--tg-theme-hint-color)]">
-                                    Чтобы загрузить видео, отправьте его боту в личные сообщения.
-                                </div>
-                            </div>
-                        );
-                    default:
-                        return <div className="p-4 text-center">Что-то пошло не так.</div>;
-                }
-            };
-
-            return (
-                <div className="min-h-screen">
-                    {renderContent()}
-                </div>
-            );
+            switch (view) {
+                case 'loading':
+                    return <div className="flex justify-center items-center h-screen"><div className="loader"></div></div>;
+                case 'form':
+                    return <AddMetadataForm {...formProps} />;
+                case 'feed':
+                default:
+                    return <VideoFeed userVideos={userVideos} />;
+            }
         }
 
         ReactDOM.render(<App />, document.getElementById('root'));
