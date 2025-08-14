@@ -41,19 +41,6 @@
             min-height: 100vh;
         }
         
-        .tg-theme-bg {
-            background-color: var(--tg-bg);
-        }
-        
-        .tg-theme-text {
-            color: var(--tg-text);
-        }
-        
-        .tg-theme-button {
-            background-color: var(--tg-button);
-            color: var(--tg-button-text);
-        }
-        
         .loader {
             border: 3px solid var(--tg-secondary-bg);
             border-top: 3px solid var(--tg-button);
@@ -115,22 +102,6 @@
             -webkit-backdrop-filter: blur(10px);
         }
         
-        .tg-header {
-            background-color: var(--tg-header);
-        }
-        
-        .tg-section {
-            background-color: var(--tg-section);
-        }
-        
-        .tg-accent {
-            color: var(--tg-accent);
-        }
-        
-        .tg-hint {
-            color: var(--tg-hint);
-        }
-        
         /* Анимации */
         @keyframes fadeIn {
             from { opacity: 0; }
@@ -169,10 +140,8 @@
         
         // Компонент верхней панели
         function Header({ title, onBack, showBack = false }) {
-            const tg = window.Telegram.WebApp;
-            
             return (
-                <div className={`tg-header sticky top-0 z-20 p-4 flex items-center border-b ${tg.colorScheme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                <div className={`sticky top-0 z-20 p-4 flex items-center border-b bg-[var(--tg-header)] ${window.Telegram.WebApp.colorScheme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                     {showBack && (
                         <button 
                             onClick={onBack}
@@ -181,7 +150,7 @@
                             <i className="fas fa-chevron-left"></i>
                         </button>
                     )}
-                    <h1 className="text-xl font-bold flex-1 text-center">{title}</h1>
+                    <h1 className="text-xl font-bold flex-1 text-center text-[var(--tg-text)]">{title}</h1>
                     {showBack && <div className="w-8"></div>}
                 </div>
             );
@@ -195,7 +164,7 @@
                     disabled={disabled || loading}
                     className={`w-full py-3 px-4 rounded-xl font-medium text-center transition-all 
                         ${primary ? 
-                            'tg-theme-button hover:opacity-90 active:opacity-80 disabled:opacity-50' : 
+                            'bg-[var(--tg-button)] text-[var(--tg-button-text)] hover:opacity-90 active:opacity-80 disabled:opacity-50' : 
                             'border border-[var(--tg-button)] text-[var(--tg-button)] hover:bg-[var(--tg-secondary-bg)] active:bg-[var(--tg-secondary-bg)] disabled:opacity-50'}
                         ${loading ? 'opacity-70' : ''}`}
                 >
@@ -212,7 +181,6 @@
         // Компонент карточки видео
         function VideoCard({ video, onPlay, onShare }) {
             const [isHovered, setIsHovered] = useState(false);
-            const tg = window.Telegram.WebApp;
             
             return (
                 <div 
@@ -278,7 +246,6 @@
             const [error, setError] = useState(null);
             const tg = window.Telegram.WebApp;
             
-            // Настройка кнопки Telegram
             useEffect(() => {
                 tg.MainButton.setParams({
                     text: 'ОПУБЛИКОВАТЬ',
@@ -293,7 +260,6 @@
                 };
             }, []);
             
-            // Активация кнопки при заполнении формы
             useEffect(() => {
                 if (title && description && file) {
                     tg.MainButton.isActive = true;
@@ -302,12 +268,10 @@
                 }
             }, [title, description, file]);
             
-            // Обработчик выбора файла
             const handleFileChange = (e) => {
                 const selectedFile = e.target.files[0];
                 if (!selectedFile) return;
                 
-                // Проверка размера файла (до 20MB)
                 if (selectedFile.size > 20 * 1024 * 1024) {
                     setError('Файл слишком большой. Максимальный размер: 20MB');
                     return;
@@ -316,7 +280,6 @@
                 setError(null);
                 setFile(selectedFile);
                 
-                // Создание превью
                 const video = document.createElement('video');
                 const url = URL.createObjectURL(selectedFile);
                 
@@ -337,7 +300,6 @@
                 video.src = url;
             };
             
-            // Обработчик отправки формы
             const handleSubmit = useCallback(async () => {
                 if (!title || !description || !file) return;
                 
@@ -347,7 +309,6 @@
                 tg.MainButton.showProgress(false);
                 
                 try {
-                    // 1. Загрузка видео в Supabase Storage
                     const fileExt = file.name.split('.').pop();
                     const fileName = `${Date.now()}.${fileExt}`;
                     const filePath = `${fileName}`;
@@ -362,12 +323,10 @@
                     
                     if (uploadError) throw uploadError;
                     
-                    // 2. Получение публичного URL
                     const { data: videoUrl } = supabase.storage
                         .from('videos')
                         .getPublicUrl(filePath);
                     
-                    // 3. Загрузка превью
                     let thumbnailUrl = null;
                     if (previewUrl) {
                         const thumbnailBlob = await fetch(previewUrl).then(r => r.blob());
@@ -389,7 +348,6 @@
                         }
                     }
                     
-                    // 4. Сохранение метаданных
                     const { data, error: insertError } = await supabase
                         .from('videos')
                         .insert([{
@@ -406,7 +364,6 @@
                     
                     if (insertError) throw insertError;
                     
-                    // 5. Успешная загрузка
                     tg.showPopup({
                         title: 'Готово!',
                         message: 'Видео успешно загружено',
@@ -426,7 +383,6 @@
                 }
             }, [title, description, category, file, previewUrl]);
             
-            // Подписка на нажатие кнопки Telegram
             useEffect(() => {
                 tg.onEvent('mainButtonClicked', handleSubmit);
                 return () => {
@@ -565,7 +521,6 @@
                     setCurrentTime(video.currentTime);
                     if (!showControls) return;
                     
-                    // Скрываем контролы через 3 секунды бездействия
                     clearTimeout(controlsTimeout.current);
                     controlsTimeout.current = setTimeout(() => {
                         setShowControls(false);
@@ -622,13 +577,42 @@
             };
             
             const shareVideo = () => {
-                const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(video.video_url)}&text=${encodeURIComponent(`Смотрите видео "${video.title}"`)}`;
-                tg.openTelegramLink(shareUrl);
+                const botUsername = tg.initDataUnsafe.user?.username || 'your_bot_username';
+                const startParam = `video_${video.id}`;
+                const miniAppUrl = `https://t.me/${botUsername}/?startapp=${startParam}`;
+                
+                tg.showPopup({
+                    title: 'Поделиться видео',
+                    message: `Вы хотите поделиться видео "${video.title}"?`,
+                    buttons: [
+                        {
+                            id: 'share',
+                            type: 'default',
+                            text: 'Поделиться в чате'
+                        },
+                        {
+                            id: 'copy',
+                            type: 'default',
+                            text: 'Копировать ссылку'
+                        },
+                        {
+                            type: 'cancel'
+                        }
+                    ]
+                }, (buttonId) => {
+                    if (buttonId === 'share') {
+                        const shareText = `Смотрите видео "${video.title}" в нашем миниаппе: ${miniAppUrl}`;
+                        tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(miniAppUrl)}&text=${encodeURIComponent(shareText)}`);
+                    } else if (buttonId === 'copy') {
+                        navigator.clipboard.writeText(miniAppUrl)
+                            .then(() => tg.showAlert('Ссылка скопирована в буфер обмена!'))
+                            .catch(() => tg.showAlert('Не удалось скопировать ссылку'));
+                    }
+                });
             };
             
             return (
                 <div className="fixed inset-0 bg-black z-50 flex flex-col">
-                    {/* Шапка с кнопкой назад */}
                     {showControls && (
                         <div className="absolute top-0 left-0 right-0 z-10 p-4 backdrop-blur bg-black bg-opacity-50 flex justify-between items-center">
                             <button 
@@ -647,7 +631,6 @@
                         </div>
                     )}
                     
-                    {/* Видеоплеер */}
                     <div 
                         className="flex-1 flex items-center justify-center relative"
                         onClick={() => {
@@ -668,7 +651,6 @@
                             src={video.video_url}
                         />
                         
-                        {/* Центральная кнопка play/pause */}
                         {!isPlaying && (
                             <button
                                 onClick={togglePlayPause}
@@ -681,7 +663,6 @@
                         )}
                     </div>
                     
-                    {/* Нижняя панель управления */}
                     {showControls && (
                         <div className="absolute bottom-0 left-0 right-0 z-10 p-4 backdrop-blur bg-black bg-opacity-50">
                             <div className="flex items-center mb-2">
@@ -726,7 +707,7 @@
         }
         
         // Главный экран с лентой видео
-        function VideoFeed() {
+        function VideoFeed({ initialVideoId }) {
             const [videos, setVideos] = useState([]);
             const [loading, setLoading] = useState(true);
             const [error, setError] = useState(null);
@@ -736,7 +717,6 @@
             const [refreshing, setRefreshing] = useState(false);
             const tg = window.Telegram.WebApp;
             
-            // Загрузка видео
             const loadVideos = useCallback(async () => {
                 try {
                     setLoading(true);
@@ -756,6 +736,14 @@
                     if (supabaseError) throw supabaseError;
                     
                     setVideos(data || []);
+                    
+                    // Если есть initialVideoId, открываем соответствующее видео
+                    if (initialVideoId && data) {
+                        const videoToOpen = data.find(v => v.id == initialVideoId);
+                        if (videoToOpen) {
+                            setCurrentVideo(videoToOpen);
+                        }
+                    }
                 } catch (err) {
                     console.error('Error loading videos:', err);
                     setError(err.message);
@@ -763,25 +751,19 @@
                     setLoading(false);
                     setRefreshing(false);
                 }
-            }, [searchQuery]);
+            }, [searchQuery, initialVideoId]);
             
-            // Первоначальная загрузка
             useEffect(() => {
                 tg.ready();
                 tg.expand();
                 
-                // Настройка кнопки меню Telegram
                 if (tg.platform !== 'unknown') {
                     tg.MainButton.hide();
                     tg.BackButton.hide();
-                    
-                    tg.setHeaderColor(tg.themeParams.bg_color || '#ffffff');
-                    tg.setBackgroundColor(tg.themeParams.bg_color || '#ffffff');
                 }
                 
                 loadVideos();
                 
-                // Подписка на изменения в реальном времени
                 const channel = supabase
                     .channel('videos_changes')
                     .on(
@@ -802,13 +784,11 @@
                 };
             }, []);
             
-            // Обновление по pull-to-refresh
             const handleRefresh = useCallback(() => {
                 setRefreshing(true);
                 loadVideos();
             }, [loadVideos]);
             
-            // Фильтрация видео по поисковому запросу
             const filteredVideos = useMemo(() => {
                 if (!searchQuery) return videos;
                 
@@ -819,8 +799,11 @@
                 );
             }, [videos, searchQuery]);
             
-            // Поделиться видео
             const handleShare = (video) => {
+                const botUsername = tg.initDataUnsafe.user?.username || 'your_bot_username';
+                const startParam = `video_${video.id}`;
+                const miniAppUrl = `https://t.me/${botUsername}/?startapp=${startParam}`;
+                
                 tg.showPopup({
                     title: 'Поделиться видео',
                     message: `Вы хотите поделиться видео "${video.title}"?`,
@@ -841,27 +824,19 @@
                     ]
                 }, (buttonId) => {
                     if (buttonId === 'share') {
-                        tg.sendData(JSON.stringify({
-                            action: 'share_video',
-                            video_id: video.id,
-                            video_url: video.video_url,
-                            title: video.title
-                        }));
+                        const shareText = `Смотрите видео "${video.title}" в нашем миниаппе: ${miniAppUrl}`;
+                        tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(miniAppUrl)}&text=${encodeURIComponent(shareText)}`);
                     } else if (buttonId === 'copy') {
-                        tg.sendData(JSON.stringify({
-                            action: 'copy_link',
-                            video_url: video.video_url
-                        }));
+                        navigator.clipboard.writeText(miniAppUrl)
+                            .then(() => tg.showAlert('Ссылка скопирована в буфер обмена!'))
+                            .catch(() => tg.showAlert('Не удалось скопировать ссылку'));
                     }
                 });
             };
             
-            // Обработчик успешной загрузки
             const handleUploadComplete = useCallback((newVideo) => {
                 setVideos(prev => [newVideo, ...prev]);
                 setShowUploadForm(false);
-                
-                // Показываем уведомление
                 tg.showAlert(`Видео "${newVideo.title}" успешно загружено!`);
             }, []);
             
@@ -883,7 +858,7 @@
                         <>
                             <Header title="Видео Лента" />
                             
-                            <div className="p-4 sticky top-14 z-10 tg-section">
+                            <div className="p-4 sticky top-14 z-10 bg-[var(--tg-section)]">
                                 <div className="relative">
                                     <input
                                         type="text"
@@ -938,10 +913,9 @@
                                 )}
                             </div>
                             
-                            {/* Кнопка добавления */}
                             <button
                                 onClick={() => setShowUploadForm(true)}
-                                className="fixed bottom-6 right-6 w-14 h-14 rounded-full tg-theme-button flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity"
+                                className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[var(--tg-button)] text-[var(--tg-button-text)] flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity"
                             >
                                 <i className="fas fa-plus text-xl"></i>
                             </button>
@@ -953,12 +927,21 @@
         
         // Главный компонент приложения
         function App() {
+            const [initialVideoId, setInitialVideoId] = useState(null);
             const tg = window.Telegram.WebApp;
             
-            // Инициализация приложения
             useEffect(() => {
                 tg.ready();
                 tg.expand();
+                
+                // Парсим start_param из URL
+                if (tg.initDataUnsafe?.start_param) {
+                    const startParam = tg.initDataUnsafe.start_param;
+                    if (startParam.startsWith('video_')) {
+                        const videoId = startParam.replace('video_', '');
+                        setInitialVideoId(videoId);
+                    }
+                }
                 
                 // Настройка цветов Telegram
                 if (tg.colorScheme) {
@@ -975,7 +958,7 @@
                 };
             }, []);
             
-            return <VideoFeed />;
+            return <VideoFeed initialVideoId={initialVideoId} />;
         }
         
         // Рендер приложения
