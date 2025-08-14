@@ -141,6 +141,8 @@
         // Константы приложения
         const BOT_USERNAME = 'nodaddyroll_bot';
         const MINI_APP_NAME = 'tutorials';
+        const MAX_FILE_SIZE_MB = 500; // Максимальный размер файла 500MB
+        const SUPPORTED_FORMATS = ['.mp4','.mov','.avi','.mkv','.webm','.mpg','.mpeg','.wmv','.flv'];
         
         // Компонент верхней панели
         function Header({ title, onBack, showBack = false }) {
@@ -276,14 +278,23 @@
                 const selectedFile = e.target.files[0];
                 if (!selectedFile) return;
                 
-                if (selectedFile.size > 20 * 1024 * 1024) {
-                    setError('Файл слишком большой. Максимальный размер: 20MB');
+                // Проверка размера файла
+                if (selectedFile.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+                    setError(`Файл слишком большой. Максимальный размер: ${MAX_FILE_SIZE_MB}MB`);
+                    return;
+                }
+                
+                // Проверка формата файла
+                const fileExtension = selectedFile.name.substring(selectedFile.name.lastIndexOf('.')).toLowerCase();
+                if (!SUPPORTED_FORMATS.includes(fileExtension)) {
+                    setError(`Неподдерживаемый формат. Разрешенные форматы: ${SUPPORTED_FORMATS.join(', ')}`);
                     return;
                 }
                 
                 setError(null);
                 setFile(selectedFile);
                 
+                // Создание превью для видео
                 const video = document.createElement('video');
                 const url = URL.createObjectURL(selectedFile);
                 
@@ -317,20 +328,33 @@
                     const fileName = `${Date.now()}.${fileExt}`;
                     const filePath = `${fileName}`;
                     
+                    // Опции загрузки с отслеживанием прогресса
+                    const uploadOptions = {
+                        cacheControl: '3600',
+                        upsert: false,
+                        contentType: file.type,
+                        onUploadProgress: (progressEvent) => {
+                            const progress = Math.round(
+                                (progressEvent.loaded * 100) / progressEvent.total
+                            );
+                            setUploadProgress(progress);
+                            tg.MainButton.setProgress(progress);
+                        }
+                    };
+                    
+                    // Загрузка видео в Supabase Storage
                     const { error: uploadError } = await supabase.storage
                         .from('videos')
-                        .upload(filePath, file, {
-                            cacheControl: '3600',
-                            upsert: false,
-                            contentType: file.type
-                        });
+                        .upload(filePath, file, uploadOptions);
                     
                     if (uploadError) throw uploadError;
                     
+                    // Получение публичного URL видео
                     const { data: videoUrl } = supabase.storage
                         .from('videos')
                         .getPublicUrl(filePath);
                     
+                    // Загрузка превью (если есть)
                     let thumbnailUrl = null;
                     if (previewUrl) {
                         const thumbnailBlob = await fetch(previewUrl).then(r => r.blob());
@@ -352,6 +376,7 @@
                         }
                     }
                     
+                    // Сохранение метаданных в таблицу videos
                     const { data, error: insertError } = await supabase
                         .from('videos')
                         .insert([{
@@ -379,8 +404,8 @@
                     
                 } catch (error) {
                     console.error('Upload error:', error);
-                    setError(error.message || 'Ошибка загрузки');
-                    tg.showAlert(error.message || 'Произошла ошибка при загрузке видео');
+                    setError(error.message || 'Ошибка загрузки. Пожалуйста, попробуйте другое видео');
+                    tg.showAlert(error.message || 'Произошла ошибка при загрузке видео. Попробуйте другое видео');
                 } finally {
                     setIsLoading(false);
                     tg.MainButton.hideProgress();
@@ -400,7 +425,7 @@
                     
                     <div className="p-4">
                         <div className="mb-6">
-                            <label className="block mb-3 font-medium text-[var(--tg-text)]">Видеофайл</label>
+                            <label className="block mb-3 font-medium text-[var(--tg-text)]">Видеофайл (до {MAX_FILE_SIZE_MB}MB)</label>
                             <label className="block border-2 border-dashed border-[var(--tg-button)] rounded-xl p-6 text-center cursor-pointer hover:bg-[var(--tg-secondary-bg)] transition-colors">
                                 {file ? (
                                     <div className="text-[var(--tg-button)]">
@@ -414,12 +439,14 @@
                                     <div>
                                         <i className="fas fa-cloud-upload-alt text-2xl mb-2 text-[var(--tg-button)]"></i>
                                         <p className="font-medium text-[var(--tg-button)]">Выберите видео</p>
-                                        <p className="text-sm text-[var(--tg-hint)] mt-1">MP4, MOV до 20MB</p>
+                                        <p className="text-sm text-[var(--tg-hint)] mt-1">
+                                            Поддерживаемые форматы: {SUPPORTED_FORMATS.join(', ')}
+                                        </p>
                                     </div>
                                 )}
                                 <input 
                                     type="file" 
-                                    accept="video/mp4,video/quicktime" 
+                                    accept="video/*"
                                     onChange={handleFileChange}
                                     className="hidden"
                                     disabled={isLoading}
@@ -856,7 +883,7 @@
                         />
                     ) : (
                         <>
-                            <Header title="NO DADDY TUTORIALS" />
+                            <Header title="Видео Лента" />
                             
                             <div className="p-4 sticky top-14 z-10 bg-[var(--tg-section)]">
                                 <div className="relative">
