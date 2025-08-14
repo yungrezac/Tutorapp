@@ -138,6 +138,10 @@
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptaWF4bGZnbG55cXl0aG1qYXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNjU2ODgsImV4cCI6MjA3MDc0MTY4OH0.IMRtToyrifCHxtvmSTwyB-mozqWEuDAN0u-iij2XxbE';
         const supabase = supabase.createClient(supabaseUrl, supabaseKey);
         
+        // Константы приложения
+        const BOT_USERNAME = 'nodaddyroll_bot';
+        const MINI_APP_NAME = 'tutorials';
+        
         // Компонент верхней панели
         function Header({ title, onBack, showBack = false }) {
             return (
@@ -577,9 +581,7 @@
             };
             
             const shareVideo = () => {
-                const botUsername = tg.initDataUnsafe.user?.username || 'your_bot_username';
-                const startParam = `video_${video.id}`;
-                const miniAppUrl = `https://t.me/${botUsername}/?startapp=${startParam}`;
+                const miniAppUrl = `https://t.me/${BOT_USERNAME}/${MINI_APP_NAME}?startapp=video_${video.id}`;
                 
                 tg.showPopup({
                     title: 'Поделиться видео',
@@ -601,7 +603,7 @@
                     ]
                 }, (buttonId) => {
                     if (buttonId === 'share') {
-                        const shareText = `Смотрите видео "${video.title}" в нашем миниаппе: ${miniAppUrl}`;
+                        const shareText = `Смотрите видео "${video.title}" в нашем миниаппе!`;
                         tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(miniAppUrl)}&text=${encodeURIComponent(shareText)}`);
                     } else if (buttonId === 'copy') {
                         navigator.clipboard.writeText(miniAppUrl)
@@ -800,9 +802,7 @@
             }, [videos, searchQuery]);
             
             const handleShare = (video) => {
-                const botUsername = tg.initDataUnsafe.user?.username || 'your_bot_username';
-                const startParam = `video_${video.id}`;
-                const miniAppUrl = `https://t.me/${botUsername}/?startapp=${startParam}`;
+                const miniAppUrl = `https://t.me/${BOT_USERNAME}/${MINI_APP_NAME}?startapp=video_${video.id}`;
                 
                 tg.showPopup({
                     title: 'Поделиться видео',
@@ -824,7 +824,7 @@
                     ]
                 }, (buttonId) => {
                     if (buttonId === 'share') {
-                        const shareText = `Смотрите видео "${video.title}" в нашем миниаппе: ${miniAppUrl}`;
+                        const shareText = `Смотрите видео "${video.title}" в нашем миниаппе!`;
                         tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(miniAppUrl)}&text=${encodeURIComponent(shareText)}`);
                     } else if (buttonId === 'copy') {
                         navigator.clipboard.writeText(miniAppUrl)
