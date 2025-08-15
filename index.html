@@ -32,9 +32,6 @@
             --tg-button: var(--tg-theme-button-color, #2481cc);
             --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
             --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f3f3f3);
-            --tg-header: var(--tg-theme-header-bg-color, var(--tg-bg));
-            --tg-section: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
-            --tg-accent: var(--tg-theme-accent-text-color, var(--tg-button));
         }
         
         body {
@@ -174,46 +171,6 @@
         }
 
         // --- КОМПОНЕНТЫ UI ---
-        function Header({ title, onBack, showBack = false, children }) {
-            return (
-                <div className={`sticky top-0 z-20 p-4 flex items-center border-b bg-[var(--tg-header)] backdrop-blur bg-opacity-80 ${window.Telegram.WebApp.colorScheme === 'dark' ? 'border-gray-800' : 'border-gray-200'}`}>
-                    {showBack && (
-                        <button 
-                            onClick={onBack}
-                            className="mr-3 text-lg flex items-center justify-center w-8 h-8 rounded-full hover:bg-[var(--tg-secondary-bg)] transition-colors"
-                        >
-                            <i className="fas fa-arrow-left"></i>
-                        </button>
-                    )}
-                    <h1 className="text-xl font-bold flex-1 truncate text-[var(--tg-text)]">{title}</h1>
-                    {children && <div className="ml-auto">{children}</div>}
-                    {showBack && !children && <div className="w-8"></div>}
-                </div>
-            );
-        }
-        
-        function TgButton({ children, onClick, primary = true, disabled = false, loading = false, className = '' }) {
-            return (
-                <button
-                    onClick={onClick}
-                    disabled={disabled || loading}
-                    className={`w-full py-3 px-4 rounded-xl font-semibold text-center transition-all duration-200 transform active:scale-95
-                        ${primary 
-                            ? 'bg-[var(--tg-button)] text-[var(--tg-button-text)] hover:opacity-90 disabled:opacity-50' 
-                            : 'bg-[var(--tg-secondary-bg)] text-[var(--tg-button)] hover:opacity-90 disabled:opacity-50'}
-                        ${loading ? 'opacity-70' : ''}
-                        ${className}`}
-                >
-                    {loading ? (
-                        <div className="flex items-center justify-center">
-                            <div className="loader mr-2 border-t-[var(--tg-button-text)]"></div>
-                            <span>{children}</span>
-                        </div>
-                    ) : children}
-                </button>
-            );
-        }
-
         function Avatar({ user, size = 'md' }) {
             const sizes = {
                 sm: 'w-8 h-8',
@@ -252,7 +209,9 @@
                                 style={{ transform: isHovered ? 'scale(1.05)' : 'scale(1)' }}
                             />
                         ) : (
-                             <div className="w-full h-full flex items-center justify-center bg-gray-700"></div>
+                             <div className="w-full h-full flex items-center justify-center bg-gray-700 text-gray-400">
+                                <i className="fas fa-video text-4xl"></i>
+                             </div>
                         )}
                         <div className="play-icon">
                             <i className="fas fa-play"></i>
@@ -287,13 +246,13 @@
             const [file, setFile] = useState(null);
             const [previewUrl, setPreviewUrl] = useState(null);
             const [isLoading, setIsLoading] = useState(false);
-            const [uploadProgress, setUploadProgress] = useState(0);
             const [error, setError] = useState(null);
             const tg = useTelegram();
             const { user } = useAuth();
             
             const isFormValid = useMemo(() => title && description && file, [title, description, file]);
 
+            // Управление главной кнопкой Telegram
             useEffect(() => {
                 tg.MainButton.setParams({
                     text: 'ОПУБЛИКОВАТЬ',
@@ -312,6 +271,18 @@
                     tg.MainButton.hide();
                 };
             }, [isFormValid, title, description, file, category]);
+
+            // Управление нативной кнопкой "Назад"
+            useEffect(() => {
+                tg.BackButton.show();
+                const backButtonClickHandler = () => onClose();
+                tg.onEvent('backButtonClicked', backButtonClickHandler);
+
+                return () => {
+                    tg.offEvent('backButtonClicked', backButtonClickHandler);
+                    tg.BackButton.hide();
+                };
+            }, [tg, onClose]);
             
             const handleFileChange = (e) => {
                 const selectedFile = e.target.files[0];
@@ -334,14 +305,18 @@
                 generateThumbnail(selectedFile);
             };
 
+            // Генерация превью из середины видео
             const generateThumbnail = (videoFile) => {
                 const video = document.createElement('video');
                 const url = URL.createObjectURL(videoFile);
                 video.src = url;
                 video.muted = true;
 
-                video.addEventListener('loadeddata', () => {
-                    video.currentTime = 1; 
+                video.addEventListener('loadedmetadata', () => {
+                    // Устанавливаем время на середину видео
+                    if (video.duration) {
+                        video.currentTime = video.duration / 2;
+                    }
                 });
 
                 video.addEventListener('seeked', () => {
@@ -359,7 +334,6 @@
                 if (!isFormValid || !user) return;
                 
                 setIsLoading(true);
-                setUploadProgress(0);
                 setError(null);
                 tg.MainButton.showProgress();
                 
@@ -370,10 +344,7 @@
                     
                     const { error: uploadError } = await supabase.storage
                         .from('videos')
-                        .upload(filePath, file, {
-                            cacheControl: '3600',
-                            upsert: false,
-                        });
+                        .upload(filePath, file);
 
                     if (uploadError) throw uploadError;
                     
@@ -436,89 +407,86 @@
             }, [isFormValid, title, description, category, file, previewUrl, user]);
             
             return (
-                <div className="pb-20">
-                    <Header title="Новое видео" onBack={onClose} showBack={true} />
-                    
-                    <div className="p-4 space-y-6">
-                        <div>
-                            <label className="block border-2 border-dashed border-[var(--tg-button)] rounded-xl p-6 text-center cursor-pointer hover:bg-[var(--tg-secondary-bg)] transition-colors">
-                                {file ? (
-                                    <div className="text-[var(--tg-button)]">
-                                        <i className="fas fa-check-circle text-3xl mb-2"></i>
-                                        <p className="font-semibold">{file.name}</p>
-                                        <p className="text-sm text-[var(--tg-hint)] mt-1">
-                                            {(file.size / 1024 / 1024).toFixed(1)} MB
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div>
-                                        <i className="fas fa-cloud-upload-alt text-3xl mb-2 text-[var(--tg-button)]"></i>
-                                        <p className="font-semibold text-[var(--tg-button)]">Выберите видео</p>
-                                        <p className="text-xs text-[var(--tg-hint)] mt-1">До {MAX_FILE_SIZE_MB}MB</p>
-                                    </div>
-                                )}
-                                <input 
-                                    type="file" 
-                                    accept="video/*"
-                                    onChange={handleFileChange}
-                                    className="hidden"
-                                    disabled={isLoading}
-                                />
-                            </label>
-                            {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
-                        </div>
-                        
-                        {previewUrl && (
-                            <div>
-                                <label className="block mb-2 font-medium text-[var(--tg-text)]">Превью</label>
-                                <div className="video-thumbnail">
-                                    <img src={previewUrl} alt="Превью видео" className="w-full h-full object-cover" />
+                <div className="p-4 space-y-6 animate-fadeIn">
+                    <h1 className="text-2xl font-bold text-[var(--tg-text)]">Новое видео</h1>
+                    <div>
+                        <label className="block border-2 border-dashed border-[var(--tg-button)] rounded-xl p-6 text-center cursor-pointer hover:bg-[var(--tg-secondary-bg)] transition-colors">
+                            {file ? (
+                                <div className="text-[var(--tg-button)]">
+                                    <i className="fas fa-check-circle text-3xl mb-2"></i>
+                                    <p className="font-semibold">{file.name}</p>
+                                    <p className="text-sm text-[var(--tg-hint)] mt-1">
+                                        {(file.size / 1024 / 1024).toFixed(1)} MB
+                                    </p>
                                 </div>
-                            </div>
-                        )}
-                        
-                        <div className="space-y-4">
-                            <input
-                                type="text"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)] focus:ring-2 focus:ring-[var(--tg-button)] outline-none"
-                                placeholder="Название"
-                                maxLength="100"
+                            ) : (
+                                <div>
+                                    <i className="fas fa-cloud-upload-alt text-3xl mb-2 text-[var(--tg-button)]"></i>
+                                    <p className="font-semibold text-[var(--tg-button)]">Выберите видео</p>
+                                    <p className="text-xs text-[var(--tg-hint)] mt-1">До {MAX_FILE_SIZE_MB}MB</p>
+                                </div>
+                            )}
+                            <input 
+                                type="file" 
+                                accept="video/*"
+                                onChange={handleFileChange}
+                                className="hidden"
                                 disabled={isLoading}
                             />
-                            <textarea
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)] focus:ring-2 focus:ring-[var(--tg-button)] outline-none"
-                                placeholder="Описание"
-                                rows="4"
-                                maxLength="500"
-                                disabled={isLoading}
-                            ></textarea>
-                            <select
-                                value={category}
-                                onChange={(e) => setCategory(e.target.value)}
-                                className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none focus:ring-2 focus:ring-[var(--tg-button)] outline-none appearance-none"
-                                disabled={isLoading}
-                            >
-                                <option value="FSK">FSK</option>
-                                <option value="Wizard">Wizard</option>
-                                <option value="Aggressive">Aggressive</option>
-                                <option value="Street">Street</option>
-                                <option value="Park">Park</option>
-                            </select>
-                        </div>
-                        
-                        {isLoading && (
-                            <div className="mt-6">
-                                <div className="progress-bar">
-                                    <div className="progress-fill" style={{ width: `${uploadProgress}%` }}></div>
-                                </div>
-                                <p className="text-center text-sm text-[var(--tg-hint)] mt-2">Загрузка... {uploadProgress}%</p>
-                            </div>
-                        )}
+                        </label>
+                        {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
                     </div>
+                    
+                    {previewUrl && (
+                        <div>
+                            <label className="block mb-2 font-medium text-[var(--tg-text)]">Превью</label>
+                            <div className="video-thumbnail">
+                                <img src={previewUrl} alt="Превью видео" className="w-full h-full object-cover" />
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className="space-y-4">
+                        <input
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)] focus:ring-2 focus:ring-[var(--tg-button)] outline-none"
+                            placeholder="Название"
+                            maxLength="100"
+                            disabled={isLoading}
+                        />
+                        <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)] focus:ring-2 focus:ring-[var(--tg-button)] outline-none"
+                            placeholder="Описание"
+                            rows="4"
+                            maxLength="500"
+                            disabled={isLoading}
+                        ></textarea>
+                        <select
+                            value={category}
+                            onChange={(e) => setCategory(e.target.value)}
+                            className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none focus:ring-2 focus:ring-[var(--tg-button)] outline-none appearance-none"
+                            disabled={isLoading}
+                        >
+                            <option value="FSK">FSK</option>
+                            <option value="Wizard">Wizard</option>
+                            <option value="Aggressive">Aggressive</option>
+                            <option value="Street">Street</option>
+                            <option value="Park">Park</option>
+                        </select>
+                    </div>
+                    
+                    {isLoading && (
+                        <div className="mt-6">
+                            <div className="progress-bar">
+                                <div className="progress-fill" style={{ width: `0%` }}></div>
+                            </div>
+                            <p className="text-center text-sm text-[var(--tg-hint)] mt-2">Загрузка...</p>
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -572,7 +540,8 @@
                 };
             }, []);
 
-            const togglePlay = () => {
+            const togglePlay = (e) => {
+                e.stopPropagation();
                 if (videoRef.current.paused) {
                     videoRef.current.play();
                 } else {
@@ -585,15 +554,17 @@
                 videoRef.current.currentTime = seekTime;
             };
 
-            const toggleFullscreen = () => {
-                if (document.fullscreenElement) {
-                    document.exitFullscreen();
+            const toggleFullscreen = (e) => {
+                e.stopPropagation();
+                if (!document.fullscreenElement) {
+                    videoRef.current.parentElement.requestFullscreen().catch(err => console.error(err));
                 } else {
-                    videoRef.current.parentElement.requestFullscreen();
+                    document.exitFullscreen();
                 }
             };
             
             const formatTime = (time) => {
+                if (isNaN(time) || time === 0) return '0:00';
                 const minutes = Math.floor(time / 60);
                 const seconds = Math.floor(time % 60);
                 return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
@@ -603,7 +574,6 @@
                 <div className="fixed inset-0 bg-black z-50 flex items-center justify-center animate-fadeIn">
                     <div 
                         className="relative w-full h-full"
-                        onMouseMove={() => { setShowControls(true); resetControlsTimeout(); }}
                         onClick={() => setShowControls(s => !s)}
                     >
                         <video
@@ -613,7 +583,7 @@
                             autoPlay
                             playsInline
                             loop
-                            onClick={togglePlay}
+                            muted={isMuted}
                         />
 
                         <div className={`absolute inset-0 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
@@ -626,13 +596,11 @@
                             </div>
 
                             {/* Center Play Button */}
-                            {!isPlaying && (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <button onClick={togglePlay} className="text-white text-6xl bg-black/40 rounded-full w-24 h-24 flex items-center justify-center">
-                                        <i className="fas fa-play ml-2"></i>
-                                    </button>
-                                </div>
-                            )}
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <button onClick={togglePlay} className={`text-white text-5xl bg-black/40 rounded-full w-20 h-20 flex items-center justify-center transition-all duration-300 pointer-events-auto ${isPlaying ? 'opacity-0 scale-150' : 'opacity-100 scale-100'}`}>
+                                    <i className="fas fa-play ml-1"></i>
+                                </button>
+                            </div>
 
                             {/* Bottom Controls */}
                             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/60 to-transparent">
@@ -641,16 +609,16 @@
                                 </div>
                                 <div className="flex items-center justify-between mt-2 text-white">
                                     <div className="flex items-center space-x-4">
-                                        <button onClick={togglePlay} className="text-2xl">
+                                        <button onClick={togglePlay} className="text-2xl w-8 text-center">
                                             <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`}></i>
                                         </button>
                                         <span className="text-sm font-mono">{formatTime(progress)} / {formatTime(duration)}</span>
                                     </div>
                                     <div className="flex items-center space-x-4">
-                                        <button onClick={() => setIsMuted(!isMuted)} className="text-2xl">
+                                        <button onClick={(e) => { e.stopPropagation(); setIsMuted(!isMuted); }} className="text-2xl w-8 text-center">
                                             <i className={`fas ${isMuted ? 'fa-volume-mute' : 'fa-volume-up'}`}></i>
                                         </button>
-                                        <button onClick={toggleFullscreen} className="text-xl">
+                                        <button onClick={toggleFullscreen} className="text-xl w-8 text-center">
                                             <i className="fas fa-expand"></i>
                                         </button>
                                     </div>
@@ -676,12 +644,10 @@
                     setLoading(true);
                     setError(null);
                     
-                    let query = supabase
+                    let { data, error: supabaseError } = await supabase
                         .from('videos')
                         .select('*')
                         .order('created_at', { ascending: false });
-                    
-                    const { data, error: supabaseError } = await query;
                     
                     if (supabaseError) throw supabaseError;
                     
@@ -705,7 +671,7 @@
                 const channel = supabase
                     .channel('videos_changes')
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'videos' }, (payload) => {
-                        loadVideos(); // Reload all videos on any change
+                        loadVideos();
                     })
                     .subscribe();
                 
@@ -741,9 +707,7 @@
                         <UploadForm onClose={() => setShowUploadForm(false)} onUploadComplete={handleUploadComplete} />
                     ) : (
                         <>
-                            <Header title="VideoShare" />
-                            
-                            <div className="p-4 sticky top-[73px] z-10 bg-[var(--tg-bg)]">
+                            <div className="p-4 sticky top-0 z-10 bg-[var(--tg-bg)] backdrop-blur bg-opacity-90">
                                 <div className="relative">
                                     <i className="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-[var(--tg-hint)]"></i>
                                     <input
