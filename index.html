@@ -2,21 +2,27 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0" />
     <title>VideoShare | Платформа для видео</title>
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <!-- Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
     <!-- React -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
     <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
     <!-- Supabase -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
     <!-- Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
     <style>
         :root {
@@ -39,6 +45,7 @@
             padding: 0;
             overscroll-behavior: none;
             min-height: 100vh;
+            -webkit-tap-highlight-color: transparent;
         }
         
         .loader {
@@ -76,6 +83,11 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            transition: transform 0.2s ease;
+        }
+
+        .video-thumbnail:hover .play-icon {
+            transform: translate(-50%, -50%) scale(1.1);
         }
         
         .play-icon i {
@@ -104,12 +116,12 @@
         
         /* Анимации */
         @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         .animate-fadeIn {
-            animation: fadeIn 0.3s ease-out;
+            animation: fadeIn 0.4s ease-out forwards;
         }
         
         /* Кастомный скроллбар */
@@ -118,11 +130,11 @@
         }
         
         ::-webkit-scrollbar-track {
-            background: var(--tg-secondary-bg);
+            background: transparent;
         }
         
         ::-webkit-scrollbar-thumb {
-            background: var(--tg-button);
+            background: var(--tg-hint);
             border-radius: 3px;
         }
     </style>
@@ -131,66 +143,100 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useCallback } = React;
+        const { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } = React;
         
-        // Инициализация Supabase
+        // --- КОНТЕКСТ ДЛЯ АУТЕНТИФИКАЦИИ ---
+        const AuthContext = createContext(null);
+
+        // --- ИНИЦИАЛИЗАЦИЯ SUPABASE ---
         const supabaseUrl = 'https://jmiaxlfglnyqythmjaqn.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptaWF4bGZnbG55cXl0aG1qYXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNjU2ODgsImV4cCI6MjA3MDc0MTY4OH0.IMRtToyrifCHxtvmSTwyB-mozqWEuDAN0u-iij2XxbE';
         const supabase = supabase.createClient(supabaseUrl, supabaseKey);
         
-        // Константы приложения
+        // --- КОНСТАНТЫ ПРИЛОЖЕНИЯ ---
         const BOT_USERNAME = 'nodaddyroll_bot';
         const MINI_APP_NAME = 'tutorials';
-        const MAX_FILE_SIZE_MB = 500; // Максимальный размер файла 500MB
+        const MAX_FILE_SIZE_MB = 500;
         const SUPPORTED_FORMATS = ['.mp4','.mov','.avi','.mkv','.webm','.mpg','.mpeg','.wmv','.flv'];
         
-        // Компонент верхней панели
-        function Header({ title, onBack, showBack = false }) {
+        // --- ХУКИ ---
+        function useTelegram() {
+            const tg = window.Telegram.WebApp;
+            useEffect(() => {
+                tg.ready();
+                tg.expand();
+            }, []);
+            return tg;
+        }
+
+        function useAuth() {
+            return useContext(AuthContext);
+        }
+
+        // --- КОМПОНЕНТЫ UI ---
+        function Header({ title, onBack, showBack = false, children }) {
             return (
-                <div className={`sticky top-0 z-20 p-4 flex items-center border-b bg-[var(--tg-header)] ${window.Telegram.WebApp.colorScheme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                <div className={`sticky top-0 z-20 p-4 flex items-center border-b bg-[var(--tg-header)] backdrop-blur bg-opacity-80 ${window.Telegram.WebApp.colorScheme === 'dark' ? 'border-gray-800' : 'border-gray-200'}`}>
                     {showBack && (
                         <button 
                             onClick={onBack}
-                            className="mr-3 text-lg flex items-center justify-center w-8 h-8 rounded-full hover:bg-[var(--tg-secondary-bg)]"
+                            className="mr-3 text-lg flex items-center justify-center w-8 h-8 rounded-full hover:bg-[var(--tg-secondary-bg)] transition-colors"
                         >
-                            <i className="fas fa-chevron-left"></i>
+                            <i className="fas fa-arrow-left"></i>
                         </button>
                     )}
-                    <h1 className="text-xl font-bold flex-1 text-center text-[var(--tg-text)]">{title}</h1>
-                    {showBack && <div className="w-8"></div>}
+                    <h1 className="text-xl font-bold flex-1 truncate text-[var(--tg-text)]">{title}</h1>
+                    {children && <div className="ml-auto">{children}</div>}
+                    {showBack && !children && <div className="w-8"></div>}
                 </div>
             );
         }
         
-        // Компонент кнопки в стиле Telegram
-        function TgButton({ children, onClick, primary = true, disabled = false, loading = false }) {
+        function TgButton({ children, onClick, primary = true, disabled = false, loading = false, className = '' }) {
             return (
                 <button
                     onClick={onClick}
                     disabled={disabled || loading}
-                    className={`w-full py-3 px-4 rounded-xl font-medium text-center transition-all 
-                        ${primary ? 
-                            'bg-[var(--tg-button)] text-[var(--tg-button-text)] hover:opacity-90 active:opacity-80 disabled:opacity-50' : 
-                            'border border-[var(--tg-button)] text-[var(--tg-button)] hover:bg-[var(--tg-secondary-bg)] active:bg-[var(--tg-secondary-bg)] disabled:opacity-50'}
-                        ${loading ? 'opacity-70' : ''}`}
+                    className={`w-full py-3 px-4 rounded-xl font-semibold text-center transition-all duration-200 transform active:scale-95
+                        ${primary 
+                            ? 'bg-[var(--tg-button)] text-[var(--tg-button-text)] hover:opacity-90 disabled:opacity-50' 
+                            : 'bg-[var(--tg-secondary-bg)] text-[var(--tg-button)] hover:opacity-90 disabled:opacity-50'}
+                        ${loading ? 'opacity-70' : ''}
+                        ${className}`}
                 >
                     {loading ? (
                         <div className="flex items-center justify-center">
-                            <div className="loader mr-2"></div>
-                            {children}
+                            <div className="loader mr-2 border-t-[var(--tg-button-text)]"></div>
+                            <span>{children}</span>
                         </div>
                     ) : children}
                 </button>
             );
         }
-        
-        // Компонент карточки видео
+
+        function Avatar({ user, size = 'md' }) {
+            const sizes = {
+                sm: 'w-8 h-8',
+                md: 'w-10 h-10',
+                lg: 'w-20 h-20'
+            };
+            const initials = user?.user_name ? user.user_name.charAt(0).toUpperCase() : '?';
+
+            return (
+                <div className={`${sizes[size]} rounded-full bg-[var(--tg-button)] flex items-center justify-center text-[var(--tg-button-text)] font-bold shrink-0`}>
+                    {initials}
+                </div>
+            );
+        }
+
+        // --- КОМПОНЕНТЫ ПРИЛОЖЕНИЯ ---
+
         function VideoCard({ video, onPlay, onShare }) {
             const [isHovered, setIsHovered] = useState(false);
             
             return (
                 <div 
-                    className="rounded-xl overflow-hidden mb-4 animate-fadeIn"
+                    className="bg-[var(--tg-secondary-bg)] rounded-xl overflow-hidden mb-4 animate-fadeIn shadow-md transition-shadow hover:shadow-lg"
                     onMouseEnter={() => setIsHovered(true)}
                     onMouseLeave={() => setIsHovered(false)}
                 >
@@ -203,44 +249,37 @@
                                 src={video.thumbnail_url} 
                                 alt="Превью видео" 
                                 className="w-full h-full object-cover transition-transform duration-300"
-                                style={{ transform: isHovered ? 'scale(1.03)' : 'scale(1)' }}
+                                style={{ transform: isHovered ? 'scale(1.05)' : 'scale(1)' }}
                             />
                         ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                                <div className="play-icon">
-                                    <i className="fas fa-play"></i>
-                                </div>
-                            </div>
+                             <div className="w-full h-full flex items-center justify-center bg-gray-700"></div>
                         )}
+                        <div className="play-icon">
+                            <i className="fas fa-play"></i>
+                        </div>
                     </div>
-                    <div className="p-3">
-                        <div className="flex justify-between items-start mb-1">
-                            <h2 className="font-semibold text-[var(--tg-text)] line-clamp-2">{video.title}</h2>
-                            <button 
+                    <div className="p-4">
+                        <div className="flex items-start">
+                            <Avatar user={video} size="md" />
+                            <div className="ml-3 flex-1">
+                                <h2 className="font-bold text-[var(--tg-text)] line-clamp-2 leading-tight">{video.title}</h2>
+                                <p className="text-sm text-[var(--tg-hint)]">{video.user_name || 'Anonymous'}</p>
+                            </div>
+                             <button 
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onShare(video);
                                 }}
-                                className="text-[var(--tg-button)] ml-2"
+                                className="text-[var(--tg-button)] ml-2 text-xl p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
                             >
                                 <i className="fas fa-share-alt"></i>
                             </button>
-                        </div>
-                        <p className="text-sm text-[var(--tg-hint)] line-clamp-2">{video.description}</p>
-                        <div className="flex items-center mt-2">
-                            <div className="text-xs px-2 py-1 rounded-full bg-[var(--tg-secondary-bg)] text-[var(--tg-text)]">
-                                {video.category}
-                            </div>
-                            <div className="text-xs text-[var(--tg-hint)] ml-auto">
-                                {new Date(video.created_at).toLocaleDateString()}
-                            </div>
                         </div>
                     </div>
                 </div>
             );
         }
         
-        // Компонент загрузки видео
         function UploadForm({ onClose, onUploadComplete }) {
             const [title, setTitle] = useState('');
             const [description, setDescription] = useState('');
@@ -250,198 +289,172 @@
             const [isLoading, setIsLoading] = useState(false);
             const [uploadProgress, setUploadProgress] = useState(0);
             const [error, setError] = useState(null);
-            const tg = window.Telegram.WebApp;
+            const tg = useTelegram();
+            const { user } = useAuth();
             
+            const isFormValid = useMemo(() => title && description && file, [title, description, file]);
+
             useEffect(() => {
                 tg.MainButton.setParams({
                     text: 'ОПУБЛИКОВАТЬ',
-                    color: tg.themeParams.button_color,
-                    text_color: tg.themeParams.button_text_color,
-                    is_active: false,
+                    is_active: isFormValid,
                     is_visible: true
                 });
+
+                const mainButtonClickHandler = () => {
+                    if (isFormValid) handleSubmit();
+                };
+
+                tg.onEvent('mainButtonClicked', mainButtonClickHandler);
                 
                 return () => {
+                    tg.offEvent('mainButtonClicked', mainButtonClickHandler);
                     tg.MainButton.hide();
                 };
-            }, []);
-            
-            useEffect(() => {
-                if (title && description && file) {
-                    tg.MainButton.isActive = true;
-                } else {
-                    tg.MainButton.isActive = false;
-                }
-            }, [title, description, file]);
+            }, [isFormValid, title, description, file, category]);
             
             const handleFileChange = (e) => {
                 const selectedFile = e.target.files[0];
                 if (!selectedFile) return;
                 
-                // Проверка размера файла
                 if (selectedFile.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-                    setError(`Файл слишком большой. Максимальный размер: ${MAX_FILE_SIZE_MB}MB`);
+                    setError(`Файл слишком большой. Максимум: ${MAX_FILE_SIZE_MB}MB`);
                     return;
                 }
                 
-                // Проверка формата файла
-                const fileExtension = selectedFile.name.substring(selectedFile.name.lastIndexOf('.')).toLowerCase();
+                const fileExtension = `.${selectedFile.name.split('.').pop()}`.toLowerCase();
                 if (!SUPPORTED_FORMATS.includes(fileExtension)) {
-                    setError(`Неподдерживаемый формат. Разрешенные форматы: ${SUPPORTED_FORMATS.join(', ')}`);
+                    setError(`Неподдерживаемый формат. Разрешены: ${SUPPORTED_FORMATS.join(', ')}`);
                     return;
                 }
                 
                 setError(null);
                 setFile(selectedFile);
                 
-                // Создание превью для видео
+                generateThumbnail(selectedFile);
+            };
+
+            const generateThumbnail = (videoFile) => {
                 const video = document.createElement('video');
-                const url = URL.createObjectURL(selectedFile);
-                
-                video.addEventListener('loadedmetadata', () => {
-                    video.currentTime = Math.min(1, video.duration / 2);
+                const url = URL.createObjectURL(videoFile);
+                video.src = url;
+                video.muted = true;
+
+                video.addEventListener('loadeddata', () => {
+                    video.currentTime = 1; 
                 });
-                
+
                 video.addEventListener('seeked', () => {
                     const canvas = document.createElement('canvas');
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    setPreviewUrl(canvas.toDataURL('image/jpeg'));
+                    setPreviewUrl(canvas.toDataURL('image/jpeg', 0.8));
                     URL.revokeObjectURL(url);
                 });
-                
-                video.src = url;
             };
             
             const handleSubmit = useCallback(async () => {
-                if (!title || !description || !file) return;
+                if (!isFormValid || !user) return;
                 
                 setIsLoading(true);
                 setUploadProgress(0);
                 setError(null);
-                tg.MainButton.showProgress(false);
+                tg.MainButton.showProgress();
                 
                 try {
                     const fileExt = file.name.split('.').pop();
-                    const fileName = `${Date.now()}.${fileExt}`;
-                    const filePath = `${fileName}`;
+                    const fileName = `${user.id}_${Date.now()}.${fileExt}`;
+                    const filePath = `public/${fileName}`;
                     
-                    // Опции загрузки с отслеживанием прогресса
-                    const uploadOptions = {
-                        cacheControl: '3600',
-                        upsert: false,
-                        contentType: file.type,
-                        onUploadProgress: (progressEvent) => {
-                            const progress = Math.round(
-                                (progressEvent.loaded * 100) / progressEvent.total
-                            );
-                            setUploadProgress(progress);
-                            tg.MainButton.setProgress(progress);
-                        }
-                    };
-                    
-                    // Загрузка видео в Supabase Storage
                     const { error: uploadError } = await supabase.storage
                         .from('videos')
-                        .upload(filePath, file, uploadOptions);
-                    
+                        .upload(filePath, file, {
+                            cacheControl: '3600',
+                            upsert: false,
+                        });
+
                     if (uploadError) throw uploadError;
                     
-                    // Получение публичного URL видео
-                    const { data: videoUrl } = supabase.storage
+                    const { data: { publicUrl: videoUrl } } = supabase.storage
                         .from('videos')
                         .getPublicUrl(filePath);
-                    
-                    // Загрузка превью (если есть)
+                        
                     let thumbnailUrl = null;
                     if (previewUrl) {
-                        const thumbnailBlob = await fetch(previewUrl).then(r => r.blob());
-                        const thumbnailPath = `thumbnails/${fileName}.jpg`;
+                        const thumbnailBlob = await (await fetch(previewUrl)).blob();
+                        const thumbnailPath = `public/thumbnails/${fileName}.jpg`;
                         
                         const { error: thumbnailError } = await supabase.storage
                             .from('videos')
-                            .upload(thumbnailPath, thumbnailBlob, {
-                                cacheControl: '3600',
-                                upsert: false,
-                                contentType: 'image/jpeg'
-                            });
-                        
+                            .upload(thumbnailPath, thumbnailBlob);
+                            
                         if (!thumbnailError) {
-                            const { data: thumbnailData } = supabase.storage
+                            const { data: { publicUrl } } = supabase.storage
                                 .from('videos')
                                 .getPublicUrl(thumbnailPath);
-                            thumbnailUrl = thumbnailData.publicUrl;
+                            thumbnailUrl = publicUrl;
                         }
                     }
                     
-                    // Сохранение метаданных в таблицу videos
                     const { data, error: insertError } = await supabase
                         .from('videos')
                         .insert([{
                             title,
                             description,
                             category,
-                            video_url: videoUrl.publicUrl,
+                            video_url: videoUrl,
                             thumbnail_url: thumbnailUrl,
-                            user_id: tg.initDataUnsafe.user?.id || 'anonymous',
-                            user_name: tg.initDataUnsafe.user?.first_name || 'Anonymous',
-                            user_username: tg.initDataUnsafe.user?.username || null
+                            user_id: user.id,
+                            user_name: user.first_name,
+                            user_username: user.username
                         }])
-                        .select();
+                        .select()
+                        .single();
                     
                     if (insertError) throw insertError;
                     
                     tg.showPopup({
                         title: 'Готово!',
-                        message: 'Видео успешно загружено',
+                        message: 'Видео успешно загружено.',
                         buttons: [{ type: 'ok' }]
                     });
                     
-                    onUploadComplete(data[0]);
+                    onUploadComplete(data);
                     onClose();
                     
                 } catch (error) {
                     console.error('Upload error:', error);
-                    setError(error.message || 'Ошибка загрузки. Пожалуйста, попробуйте другое видео');
-                    tg.showAlert(error.message || 'Произошла ошибка при загрузке видео. Попробуйте другое видео');
+                    const errorMessage = 'Ошибка загрузки. Пожалуйста, попробуйте еще раз.';
+                    setError(errorMessage);
+                    tg.showAlert(errorMessage);
                 } finally {
                     setIsLoading(false);
                     tg.MainButton.hideProgress();
                 }
-            }, [title, description, category, file, previewUrl]);
-            
-            useEffect(() => {
-                tg.onEvent('mainButtonClicked', handleSubmit);
-                return () => {
-                    tg.offEvent('mainButtonClicked', handleSubmit);
-                };
-            }, [handleSubmit]);
+            }, [isFormValid, title, description, category, file, previewUrl, user]);
             
             return (
                 <div className="pb-20">
                     <Header title="Новое видео" onBack={onClose} showBack={true} />
                     
-                    <div className="p-4">
-                        <div className="mb-6">
-                            <label className="block mb-3 font-medium text-[var(--tg-text)]">Видеофайл (до {MAX_FILE_SIZE_MB}MB)</label>
+                    <div className="p-4 space-y-6">
+                        <div>
                             <label className="block border-2 border-dashed border-[var(--tg-button)] rounded-xl p-6 text-center cursor-pointer hover:bg-[var(--tg-secondary-bg)] transition-colors">
                                 {file ? (
                                     <div className="text-[var(--tg-button)]">
-                                        <i className="fas fa-check-circle text-2xl mb-2"></i>
-                                        <p className="font-medium">{file.name}</p>
+                                        <i className="fas fa-check-circle text-3xl mb-2"></i>
+                                        <p className="font-semibold">{file.name}</p>
                                         <p className="text-sm text-[var(--tg-hint)] mt-1">
                                             {(file.size / 1024 / 1024).toFixed(1)} MB
                                         </p>
                                     </div>
                                 ) : (
                                     <div>
-                                        <i className="fas fa-cloud-upload-alt text-2xl mb-2 text-[var(--tg-button)]"></i>
-                                        <p className="font-medium text-[var(--tg-button)]">Выберите видео</p>
-                                        <p className="text-sm text-[var(--tg-hint)] mt-1">
-                                            Поддерживаемые форматы: {SUPPORTED_FORMATS.join(', ')}
-                                        </p>
+                                        <i className="fas fa-cloud-upload-alt text-3xl mb-2 text-[var(--tg-button)]"></i>
+                                        <p className="font-semibold text-[var(--tg-button)]">Выберите видео</p>
+                                        <p className="text-xs text-[var(--tg-hint)] mt-1">До {MAX_FILE_SIZE_MB}MB</p>
                                     </div>
                                 )}
                                 <input 
@@ -452,80 +465,57 @@
                                     disabled={isLoading}
                                 />
                             </label>
-                            {error && (
-                                <p className="text-red-500 text-sm mt-2">{error}</p>
-                            )}
+                            {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
                         </div>
                         
                         {previewUrl && (
-                            <div className="mb-6">
-                                <label className="block mb-3 font-medium text-[var(--tg-text)]">Превью</label>
+                            <div>
+                                <label className="block mb-2 font-medium text-[var(--tg-text)]">Превью</label>
                                 <div className="video-thumbnail">
-                                    <img 
-                                        src={previewUrl} 
-                                        alt="Превью видео" 
-                                        className="w-full h-full object-cover"
-                                    />
+                                    <img src={previewUrl} alt="Превью видео" className="w-full h-full object-cover" />
                                 </div>
                             </div>
                         )}
                         
                         <div className="space-y-4">
-                            <div>
-                                <label htmlFor="title" className="block mb-2 font-medium text-[var(--tg-text)]">Название</label>
-                                <input
-                                    id="title"
-                                    type="text"
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
-                                    className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)]"
-                                    placeholder="Мое крутое видео"
-                                    maxLength="100"
-                                    disabled={isLoading}
-                                />
-                            </div>
-                            
-                            <div>
-                                <label htmlFor="description" className="block mb-2 font-medium text-[var(--tg-text)]">Описание</label>
-                                <textarea
-                                    id="description"
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)]"
-                                    placeholder="Расскажите о своем видео"
-                                    rows="3"
-                                    maxLength="300"
-                                    disabled={isLoading}
-                                ></textarea>
-                            </div>
-                            
-                            <div>
-                                <label htmlFor="category" className="block mb-2 font-medium text-[var(--tg-text)]">Категория</label>
-                                <select
-                                    id="category"
-                                    value={category}
-                                    onChange={(e) => setCategory(e.target.value)}
-                                    className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none"
-                                    disabled={isLoading}
-                                >
-                                    <option value="FSK">FSK</option>
-                                    <option value="Wizard">Wizard</option>
-                                    <option value="Aggressive">Aggressive</option>
-                                    <option value="Street">Street</option>
-                                    <option value="Park">Park</option>
-                                </select>
-                            </div>
+                            <input
+                                type="text"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)] focus:ring-2 focus:ring-[var(--tg-button)] outline-none"
+                                placeholder="Название"
+                                maxLength="100"
+                                disabled={isLoading}
+                            />
+                            <textarea
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)] focus:ring-2 focus:ring-[var(--tg-button)] outline-none"
+                                placeholder="Описание"
+                                rows="4"
+                                maxLength="500"
+                                disabled={isLoading}
+                            ></textarea>
+                            <select
+                                value={category}
+                                onChange={(e) => setCategory(e.target.value)}
+                                className="w-full p-3 rounded-lg bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none focus:ring-2 focus:ring-[var(--tg-button)] outline-none appearance-none"
+                                disabled={isLoading}
+                            >
+                                <option value="FSK">FSK</option>
+                                <option value="Wizard">Wizard</option>
+                                <option value="Aggressive">Aggressive</option>
+                                <option value="Street">Street</option>
+                                <option value="Park">Park</option>
+                            </select>
                         </div>
                         
                         {isLoading && (
                             <div className="mt-6">
-                                <div className="flex justify-between text-sm mb-1">
-                                    <span className="text-[var(--tg-text)]">Загрузка...</span>
-                                    <span className="text-[var(--tg-hint)]">{uploadProgress}%</span>
-                                </div>
                                 <div className="progress-bar">
                                     <div className="progress-fill" style={{ width: `${uploadProgress}%` }}></div>
                                 </div>
+                                <p className="text-center text-sm text-[var(--tg-hint)] mt-2">Загрузка... {uploadProgress}%</p>
                             </div>
                         )}
                     </div>
@@ -533,209 +523,145 @@
             );
         }
         
-        // Компонент просмотра видео
         function VideoPlayer({ video, onClose }) {
+            const videoRef = useRef(null);
             const [isPlaying, setIsPlaying] = useState(true);
-            const [showControls, setShowControls] = useState(true);
-            const [currentTime, setCurrentTime] = useState(0);
+            const [isMuted, setIsMuted] = useState(false);
+            const [progress, setProgress] = useState(0);
             const [duration, setDuration] = useState(0);
-            const videoRef = React.useRef(null);
-            const controlsTimeout = React.useRef(null);
-            const tg = window.Telegram.WebApp;
+            const [showControls, setShowControls] = useState(true);
+            const controlsTimeoutRef = useRef(null);
+            const tg = useTelegram();
+
+            const hideControls = () => {
+                if (videoRef.current && !videoRef.current.paused) {
+                    setShowControls(false);
+                }
+            };
+
+            const resetControlsTimeout = () => {
+                clearTimeout(controlsTimeoutRef.current);
+                controlsTimeoutRef.current = setTimeout(hideControls, 3000);
+            };
             
             useEffect(() => {
-                if (!videoRef.current) return;
-                
-                const video = videoRef.current;
-                
-                const handleTimeUpdate = () => {
-                    setCurrentTime(video.currentTime);
-                    if (!showControls) return;
-                    
-                    clearTimeout(controlsTimeout.current);
-                    controlsTimeout.current = setTimeout(() => {
-                        setShowControls(false);
-                    }, 3000);
+                const videoElement = videoRef.current;
+                if (!videoElement) return;
+
+                const onPlay = () => setIsPlaying(true);
+                const onPause = () => setIsPlaying(false);
+                const onTimeUpdate = () => {
+                    setProgress(videoElement.currentTime);
+                    resetControlsTimeout();
                 };
+                const onLoadedMetadata = () => setDuration(videoElement.duration);
                 
-                const handleLoadedMetadata = () => {
-                    setDuration(video.duration);
-                };
-                
-                const handleEnded = () => {
-                    setIsPlaying(false);
-                    setShowControls(true);
-                };
-                
-                video.addEventListener('timeupdate', handleTimeUpdate);
-                video.addEventListener('loadedmetadata', handleLoadedMetadata);
-                video.addEventListener('ended', handleEnded);
+                videoElement.addEventListener('play', onPlay);
+                videoElement.addEventListener('pause', onPause);
+                videoElement.addEventListener('timeupdate', onTimeUpdate);
+                videoElement.addEventListener('loadedmetadata', onLoadedMetadata);
+
+                resetControlsTimeout();
                 
                 return () => {
-                    video.removeEventListener('timeupdate', handleTimeUpdate);
-                    video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-                    video.removeEventListener('ended', handleEnded);
-                    clearTimeout(controlsTimeout.current);
+                    videoElement.removeEventListener('play', onPlay);
+                    videoElement.removeEventListener('pause', onPause);
+                    videoElement.removeEventListener('timeupdate', onTimeUpdate);
+                    videoElement.removeEventListener('loadedmetadata', onLoadedMetadata);
+                    clearTimeout(controlsTimeoutRef.current);
                 };
-            }, [showControls]);
-            
-            const togglePlayPause = () => {
-                if (!videoRef.current) return;
-                
-                if (isPlaying) {
-                    videoRef.current.pause();
-                } else {
+            }, []);
+
+            const togglePlay = () => {
+                if (videoRef.current.paused) {
                     videoRef.current.play();
+                } else {
+                    videoRef.current.pause();
                 }
-                
-                setIsPlaying(!isPlaying);
-                setShowControls(true);
             };
-            
+
             const handleSeek = (e) => {
-                if (!videoRef.current) return;
-                
-                const rect = e.currentTarget.getBoundingClientRect();
-                const pos = (e.clientX - rect.left) / rect.width;
-                videoRef.current.currentTime = pos * duration;
-                setShowControls(true);
+                const seekTime = (e.nativeEvent.offsetX / e.currentTarget.offsetWidth) * duration;
+                videoRef.current.currentTime = seekTime;
+            };
+
+            const toggleFullscreen = () => {
+                if (document.fullscreenElement) {
+                    document.exitFullscreen();
+                } else {
+                    videoRef.current.parentElement.requestFullscreen();
+                }
             };
             
-            const formatTime = (seconds) => {
-                const mins = Math.floor(seconds / 60);
-                const secs = Math.floor(seconds % 60);
-                return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            const formatTime = (time) => {
+                const minutes = Math.floor(time / 60);
+                const seconds = Math.floor(time % 60);
+                return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
             };
-            
-            const shareVideo = () => {
-                const miniAppUrl = `https://t.me/${BOT_USERNAME}/${MINI_APP_NAME}?startapp=video_${video.id}`;
-                
-                tg.showPopup({
-                    title: 'Поделиться видео',
-                    message: `Вы хотите поделиться видео "${video.title}"?`,
-                    buttons: [
-                        {
-                            id: 'share',
-                            type: 'default',
-                            text: 'Поделиться в чате'
-                        },
-                        {
-                            id: 'copy',
-                            type: 'default',
-                            text: 'Копировать ссылку'
-                        },
-                        {
-                            type: 'cancel'
-                        }
-                    ]
-                }, (buttonId) => {
-                    if (buttonId === 'share') {
-                        const shareText = `Смотрите видео "${video.title}" в нашем миниаппе!`;
-                        tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(miniAppUrl)}&text=${encodeURIComponent(shareText)}`);
-                    } else if (buttonId === 'copy') {
-                        navigator.clipboard.writeText(miniAppUrl)
-                            .then(() => tg.showAlert('Ссылка скопирована в буфер обмена!'))
-                            .catch(() => tg.showAlert('Не удалось скопировать ссылку'));
-                    }
-                });
-            };
-            
+
             return (
-                <div className="fixed inset-0 bg-black z-50 flex flex-col">
-                    {showControls && (
-                        <div className="absolute top-0 left-0 right-0 z-10 p-4 backdrop-blur bg-black bg-opacity-50 flex justify-between items-center">
-                            <button 
-                                onClick={onClose}
-                                className="text-white text-xl w-10 h-10 flex items-center justify-center rounded-full hover:bg-white hover:bg-opacity-20"
-                            >
-                                <i className="fas fa-times"></i>
-                            </button>
-                            <h2 className="text-white font-medium text-lg mx-2 truncate">{video.title}</h2>
-                            <button 
-                                onClick={shareVideo}
-                                className="text-white text-xl w-10 h-10 flex items-center justify-center rounded-full hover:bg-white hover:bg-opacity-20"
-                            >
-                                <i className="fas fa-share-alt"></i>
-                            </button>
-                        </div>
-                    )}
-                    
+                <div className="fixed inset-0 bg-black z-50 flex items-center justify-center animate-fadeIn">
                     <div 
-                        className="flex-1 flex items-center justify-center relative"
-                        onClick={() => {
-                            setShowControls(!showControls);
-                            if (!showControls) {
-                                clearTimeout(controlsTimeout.current);
-                                controlsTimeout.current = setTimeout(() => {
-                                    setShowControls(false);
-                                }, 3000);
-                            }
-                        }}
+                        className="relative w-full h-full"
+                        onMouseMove={() => { setShowControls(true); resetControlsTimeout(); }}
+                        onClick={() => setShowControls(s => !s)}
                     >
                         <video
                             ref={videoRef}
-                            autoPlay
-                            controls={false}
-                            className="w-full h-full object-contain"
                             src={video.video_url}
+                            className="w-full h-full object-contain"
+                            autoPlay
+                            playsInline
+                            loop
+                            onClick={togglePlay}
                         />
-                        
-                        {!isPlaying && (
-                            <button
-                                onClick={togglePlayPause}
-                                className="absolute inset-0 flex items-center justify-center z-10"
-                            >
-                                <div className="play-icon">
-                                    <i className="fas fa-play"></i>
-                                </div>
-                            </button>
-                        )}
-                    </div>
-                    
-                    {showControls && (
-                        <div className="absolute bottom-0 left-0 right-0 z-10 p-4 backdrop-blur bg-black bg-opacity-50">
-                            <div className="flex items-center mb-2">
-                                <span className="text-white text-xs mr-2">{formatTime(currentTime)}</span>
-                                <div 
-                                    className="flex-1 h-1 bg-gray-500 rounded-full cursor-pointer"
-                                    onClick={handleSeek}
-                                >
-                                    <div 
-                                        className="h-full bg-[var(--tg-button)] rounded-full"
-                                        style={{ width: `${(currentTime / duration) * 100}%` }}
-                                    ></div>
-                                </div>
-                                <span className="text-white text-xs ml-2">{formatTime(duration)}</span>
+
+                        <div className={`absolute inset-0 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
+                            {/* Top Controls */}
+                            <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/60 to-transparent flex items-center">
+                                <button onClick={onClose} className="text-white text-2xl p-2 rounded-full hover:bg-white/20">
+                                    <i className="fas fa-arrow-left"></i>
+                                </button>
+                                <h2 className="text-white font-semibold text-lg ml-4 truncate">{video.title}</h2>
                             </div>
-                            
-                            <div className="flex justify-between items-center">
-                                <button 
-                                    onClick={togglePlayPause}
-                                    className="text-white text-xl w-10 h-10 flex items-center justify-center"
-                                >
-                                    <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`}></i>
-                                </button>
-                                
-                                <div className="flex items-center">
-                                    <button className="text-white text-lg mx-3">
-                                        <i className="fas fa-step-backward"></i>
-                                    </button>
-                                    <button className="text-white text-lg mx-3">
-                                        <i className="fas fa-step-forward"></i>
+
+                            {/* Center Play Button */}
+                            {!isPlaying && (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <button onClick={togglePlay} className="text-white text-6xl bg-black/40 rounded-full w-24 h-24 flex items-center justify-center">
+                                        <i className="fas fa-play ml-2"></i>
                                     </button>
                                 </div>
-                                
-                                <button className="text-white text-xl">
-                                    <i className="fas fa-expand"></i>
-                                </button>
+                            )}
+
+                            {/* Bottom Controls */}
+                            <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/60 to-transparent">
+                                <div className="w-full h-1.5 bg-white/30 rounded-full cursor-pointer" onClick={handleSeek}>
+                                    <div className="h-full bg-[var(--tg-button)] rounded-full" style={{ width: `${(progress / duration) * 100}%` }}></div>
+                                </div>
+                                <div className="flex items-center justify-between mt-2 text-white">
+                                    <div className="flex items-center space-x-4">
+                                        <button onClick={togglePlay} className="text-2xl">
+                                            <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`}></i>
+                                        </button>
+                                        <span className="text-sm font-mono">{formatTime(progress)} / {formatTime(duration)}</span>
+                                    </div>
+                                    <div className="flex items-center space-x-4">
+                                        <button onClick={() => setIsMuted(!isMuted)} className="text-2xl">
+                                            <i className={`fas ${isMuted ? 'fa-volume-mute' : 'fa-volume-up'}`}></i>
+                                        </button>
+                                        <button onClick={toggleFullscreen} className="text-xl">
+                                            <i className="fas fa-expand"></i>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    )}
+                    </div>
                 </div>
             );
         }
         
-        // Главный экран с лентой видео
         function VideoFeed({ initialVideoId }) {
             const [videos, setVideos] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -743,8 +669,7 @@
             const [showUploadForm, setShowUploadForm] = useState(false);
             const [currentVideo, setCurrentVideo] = useState(null);
             const [searchQuery, setSearchQuery] = useState('');
-            const [refreshing, setRefreshing] = useState(false);
-            const tg = window.Telegram.WebApp;
+            const tg = useTelegram();
             
             const loadVideos = useCallback(async () => {
                 try {
@@ -756,56 +681,32 @@
                         .select('*')
                         .order('created_at', { ascending: false });
                     
-                    if (searchQuery) {
-                        query = query.ilike('title', `%${searchQuery}%`);
-                    }
-                    
                     const { data, error: supabaseError } = await query;
                     
                     if (supabaseError) throw supabaseError;
                     
                     setVideos(data || []);
-                    
-                    // Если есть initialVideoId, открываем соответствующее видео
+
                     if (initialVideoId && data) {
                         const videoToOpen = data.find(v => v.id == initialVideoId);
-                        if (videoToOpen) {
-                            setCurrentVideo(videoToOpen);
-                        }
+                        if (videoToOpen) setCurrentVideo(videoToOpen);
                     }
                 } catch (err) {
                     console.error('Error loading videos:', err);
                     setError(err.message);
                 } finally {
                     setLoading(false);
-                    setRefreshing(false);
                 }
-            }, [searchQuery, initialVideoId]);
+            }, [initialVideoId]);
             
             useEffect(() => {
-                tg.ready();
-                tg.expand();
-                
-                if (tg.platform !== 'unknown') {
-                    tg.MainButton.hide();
-                    tg.BackButton.hide();
-                }
-                
                 loadVideos();
                 
                 const channel = supabase
                     .channel('videos_changes')
-                    .on(
-                        'postgres_changes',
-                        { event: '*', schema: 'public', table: 'videos' },
-                        (payload) => {
-                            if (payload.eventType === 'INSERT') {
-                                setVideos(prev => [payload.new, ...prev]);
-                            } else if (payload.eventType === 'DELETE') {
-                                setVideos(prev => prev.filter(v => v.id !== payload.old.id));
-                            }
-                        }
-                    )
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'videos' }, (payload) => {
+                        loadVideos(); // Reload all videos on any change
+                    })
                     .subscribe();
                 
                 return () => {
@@ -813,121 +714,61 @@
                 };
             }, []);
             
-            const handleRefresh = useCallback(() => {
-                setRefreshing(true);
-                loadVideos();
-            }, [loadVideos]);
-            
             const filteredVideos = useMemo(() => {
                 if (!searchQuery) return videos;
-                
                 return videos.filter(video => 
                     video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    (video.description && video.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                    video.category.toLowerCase().includes(searchQuery.toLowerCase())
+                    (video.description && video.description.toLowerCase().includes(searchQuery.toLowerCase()))
                 );
             }, [videos, searchQuery]);
-            
+
             const handleShare = (video) => {
                 const miniAppUrl = `https://t.me/${BOT_USERNAME}/${MINI_APP_NAME}?startapp=video_${video.id}`;
-                
-                tg.showPopup({
-                    title: 'Поделиться видео',
-                    message: `Вы хотите поделиться видео "${video.title}"?`,
-                    buttons: [
-                        {
-                            id: 'share',
-                            type: 'default',
-                            text: 'Поделиться в чате'
-                        },
-                        {
-                            id: 'copy',
-                            type: 'default',
-                            text: 'Копировать ссылку'
-                        },
-                        {
-                            type: 'cancel'
-                        }
-                    ]
-                }, (buttonId) => {
-                    if (buttonId === 'share') {
-                        const shareText = `Смотрите видео "${video.title}" в нашем миниаппе!`;
-                        tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(miniAppUrl)}&text=${encodeURIComponent(shareText)}`);
-                    } else if (buttonId === 'copy') {
-                        navigator.clipboard.writeText(miniAppUrl)
-                            .then(() => tg.showAlert('Ссылка скопирована в буфер обмена!'))
-                            .catch(() => tg.showAlert('Не удалось скопировать ссылку'));
-                    }
-                });
+                const shareText = `Смотри видео "${video.title}"!`;
+                tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(miniAppUrl)}&text=${encodeURIComponent(shareText)}`);
             };
-            
-            const handleUploadComplete = useCallback((newVideo) => {
+
+            const handleUploadComplete = (newVideo) => {
                 setVideos(prev => [newVideo, ...prev]);
                 setShowUploadForm(false);
-                tg.showAlert(`Видео "${newVideo.title}" успешно загружено!`);
-            }, []);
+            };
             
             return (
-                <div className="pb-16">
-                    {currentVideo && (
-                        <VideoPlayer 
-                            video={currentVideo} 
-                            onClose={() => setCurrentVideo(null)} 
-                        />
-                    )}
+                <div className="pb-24">
+                    {currentVideo && <VideoPlayer video={currentVideo} onClose={() => setCurrentVideo(null)} />}
                     
                     {showUploadForm ? (
-                        <UploadForm 
-                            onClose={() => setShowUploadForm(false)} 
-                            onUploadComplete={handleUploadComplete}
-                        />
+                        <UploadForm onClose={() => setShowUploadForm(false)} onUploadComplete={handleUploadComplete} />
                     ) : (
                         <>
-                            <Header title="Видео Лента" />
+                            <Header title="VideoShare" />
                             
-                            <div className="p-4 sticky top-14 z-10 bg-[var(--tg-section)]">
+                            <div className="p-4 sticky top-[73px] z-10 bg-[var(--tg-bg)]">
                                 <div className="relative">
+                                    <i className="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-[var(--tg-hint)]"></i>
                                     <input
                                         type="text"
-                                        placeholder="🔍 Поиск видео..."
+                                        placeholder="Поиск видео..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="w-full p-3 pl-10 rounded-xl bg-[var(--tg-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)] shadow-sm"
+                                        className="w-full p-3 pl-12 rounded-xl bg-[var(--tg-secondary-bg)] text-[var(--tg-text)] border-none placeholder-[var(--tg-hint)] focus:ring-2 focus:ring-[var(--tg-button)] outline-none"
                                     />
-                                    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--tg-hint)]"></i>
                                 </div>
                             </div>
                             
-                            <div className="p-4">
-                                {loading && !refreshing ? (
-                                    <div className="flex justify-center items-center py-10">
-                                        <div className="loader"></div>
-                                    </div>
+                            <div className="px-4">
+                                {loading ? (
+                                    <div className="flex justify-center items-center py-10"><div className="loader"></div></div>
                                 ) : error ? (
-                                    <div className="text-center py-10">
-                                        <i className="fas fa-exclamation-triangle text-2xl text-red-500 mb-3"></i>
-                                        <p className="text-[var(--tg-text)] font-medium">Ошибка загрузки</p>
-                                        <p className="text-[var(--tg-hint)] mt-1">{error}</p>
-                                        <TgButton 
-                                            onClick={handleRefresh}
-                                            primary={false}
-                                            className="mt-4"
-                                        >
-                                            Попробовать снова
-                                        </TgButton>
-                                    </div>
+                                    <div className="text-center py-10 text-red-500">Ошибка: {error}</div>
                                 ) : filteredVideos.length === 0 ? (
-                                    <div className="text-center py-10">
-                                        <i className="fas fa-video-slash text-2xl text-[var(--tg-hint)] mb-3"></i>
-                                        <p className="text-[var(--tg-text)] font-medium">
-                                            {searchQuery ? 'Ничего не найдено' : 'Нет видео'}
-                                        </p>
-                                        <p className="text-[var(--tg-hint)] mt-1">
-                                            {searchQuery ? 'Попробуйте другой запрос' : 'Будьте первым, кто загрузит видео!'}
-                                        </p>
+                                    <div className="text-center py-20 text-[var(--tg-hint)]">
+                                        <i className="fas fa-video-slash text-4xl mb-4"></i>
+                                        <p className="font-semibold">Видео не найдены</p>
+                                        <p>Попробуйте другой запрос или загрузите свое видео.</p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 gap-4">
+                                    <div>
                                         {filteredVideos.map(video => (
                                             <VideoCard
                                                 key={video.id}
@@ -942,9 +783,9 @@
                             
                             <button
                                 onClick={() => setShowUploadForm(true)}
-                                className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[var(--tg-button)] text-[var(--tg-button-text)] flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity"
+                                className="fixed bottom-6 right-6 w-16 h-16 rounded-2xl bg-[var(--tg-button)] text-[var(--tg-button-text)] flex items-center justify-center shadow-lg hover:opacity-90 transition-all transform active:scale-90"
                             >
-                                <i className="fas fa-plus text-xl"></i>
+                                <i className="fas fa-plus text-2xl"></i>
                             </button>
                         </>
                     )}
@@ -952,43 +793,39 @@
             );
         }
         
-        // Главный компонент приложения
         function App() {
+            const [user, setUser] = useState(null);
             const [initialVideoId, setInitialVideoId] = useState(null);
-            const tg = window.Telegram.WebApp;
+            const tg = useTelegram();
             
             useEffect(() => {
-                tg.ready();
-                tg.expand();
-                
-                // Парсим start_param из URL
+                const tgUser = tg.initDataUnsafe?.user;
+                if (tgUser) {
+                    setUser(tgUser);
+                }
+
                 if (tg.initDataUnsafe?.start_param) {
                     const startParam = tg.initDataUnsafe.start_param;
                     if (startParam.startsWith('video_')) {
-                        const videoId = startParam.replace('video_', '');
-                        setInitialVideoId(videoId);
+                        setInitialVideoId(startParam.replace('video_', ''));
                     }
                 }
-                
-                // Настройка цветов Telegram
-                if (tg.colorScheme) {
-                    document.documentElement.style.setProperty('--tg-color-scheme', tg.colorScheme);
-                }
-                
-                // Обработка кнопки "Назад" в Telegram
-                tg.onEvent('backButtonClicked', () => {
-                    // Можно добавить логику навигации назад
-                });
-                
-                return () => {
-                    tg.offEvent('backButtonClicked');
-                };
-            }, []);
+            }, [tg]);
             
-            return <VideoFeed initialVideoId={initialVideoId} />;
+            return (
+                <AuthContext.Provider value={{ user }}>
+                    {user ? <VideoFeed initialVideoId={initialVideoId} /> : 
+                        <div className="flex items-center justify-center h-screen">
+                            <div className="text-center text-[var(--tg-hint)]">
+                                <div className="loader mb-4"></div>
+                                <p>Загрузка данных пользователя...</p>
+                            </div>
+                        </div>
+                    }
+                </AuthContext.Provider>
+            );
         }
         
-        // Рендер приложения
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
