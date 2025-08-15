@@ -200,25 +200,9 @@
 
         // --- КОМПОНЕНТЫ UI ---
         function Avatar({ user, size = 'md' }) {
-            const [photoUrl, setPhotoUrl] = useState(null);
-            const { tg } = useTelegram();
-
-            useEffect(() => {
-                // Пытаемся получить фото профиля пользователя. Требует разрешения.
-                if (tg && user?.id) {
-                    tg.getUserProfilePhotos(user.id, (result) => {
-                        if (result.status === 'ok' && result.photos.length > 0) {
-                            // Берем фото наименьшего размера
-                            const smallestPhoto = result.photos[0][0]; 
-                            tg.getFileUrl(smallestPhoto.file_id, (urlResult) => {
-                                if (urlResult.status === 'ok') {
-                                    setPhotoUrl(urlResult.url);
-                                }
-                            });
-                        }
-                    });
-                }
-            }, [tg, user]);
+            // FIX: The `photo_url` should be part of the user object if available from Telegram.
+            // The previous method `getUserProfilePhotos` does not exist in the SDK.
+            const photoUrl = user?.photo_url;
 
             const sizes = {
                 sm: 'w-8 h-8',
@@ -877,11 +861,13 @@
             );
         }
         
-        ReactDOM.render(
+        // FIX: Update to React 18 createRoot API
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(
             <TelegramProvider>
                 <App />
-            </TelegramProvider>,
-            document.getElementById('root')
+            </TelegramProvider>
         );
     </script>
 </body>
